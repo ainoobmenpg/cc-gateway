@@ -10,9 +10,9 @@ use axum::{
 use crate::handlers::{
     chat, clear_session, health, memory, session_info,
     // Session management
-    create_session, get_session, delete_session, list_sessions,
+    delete_session, get_session, list_sessions,
     // Tools
-    list_tools, execute_tool,
+    execute_tool, list_tools,
     // Schedules
     list_schedules,
 };
@@ -31,7 +31,6 @@ pub fn routes() -> Router<AppState> {
         // Memory endpoint
         .route("/api/memory", post(memory))
         // Session management API
-        .route("/api/sessions", post(create_session))
         .route("/api/sessions", get(list_sessions))
         .route("/api/sessions/:id", get(get_session))
         .route("/api/sessions/:id", delete(delete_session))

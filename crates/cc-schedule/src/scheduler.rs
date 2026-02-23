@@ -3,7 +3,7 @@
 //! cron スケジュールに基づいてタスクを実行します。
 
 use crate::config::{ScheduleConfig, ScheduleTask};
-use crate::error::Result;
+use crate::error::{Result, ScheduleError};
 use cc_core::{ClaudeClient, ToolManager};
 use chrono::{DateTime, Utc};
 use cron::Schedule as CronSchedule;
@@ -226,10 +226,31 @@ async fn execute_task(
 }
 
 /// cron 文字列をパース
+///
+/// 5フィールド形式（分 時 日 月 曜日）を7フィールド形式（秒 分 時 日 月 曜日 年）に自動変換します。
+/// - 5フィールド: "0 9 * * *" → "0 0 9 * * * *" (毎日 9:00)
+/// - 6フィールド: "0 0 9 * * *" → "0 0 9 * * * *" (秒付き、年に *)
+/// - 7フィールド: そのまま
 fn parse_cron(cron_expr: &str) -> Result<CronSchedule> {
-    // cron 形式: "分 時 日 月 曜日"
-    // 例: "0 9 * * *" = 毎日 9:00
-    let schedule = cron_expr.parse::<CronSchedule>()?;
+    let fields: Vec<&str> = cron_expr.split_whitespace().collect();
+
+    let normalized = match fields.len() {
+        5 => {
+            // 5フィールド → 7フィールド: 秒(0) + 入力 + 年(*)
+            format!("0 {} *", cron_expr)
+        }
+        6 => {
+            // 6フィールド → 7フィールド: 入力 + 年(*)
+            format!("{} *", cron_expr)
+        }
+        7 => cron_expr.to_string(),
+        _ => return Err(ScheduleError::CronParse(format!(
+            "Invalid cron expression: expected 5-7 fields, got {}",
+            fields.len()
+        ))),
+    };
+
+    let schedule = normalized.parse::<CronSchedule>()?;
     Ok(schedule)
 }
 

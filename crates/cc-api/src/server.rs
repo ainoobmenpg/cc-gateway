@@ -14,12 +14,22 @@ use cc_core::{ClaudeClient, Config, SessionManager, ToolManager};
 use crate::routes::routes;
 
 /// 共有アプリケーション状態
-#[derive(Clone)]
 pub struct AppState {
     pub config: Config,
     pub claude_client: Arc<ClaudeClient>,
     pub session_manager: Arc<SessionManager>,
     pub tool_manager: Arc<ToolManager>,
+}
+
+impl Clone for AppState {
+    fn clone(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+            claude_client: Arc::clone(&self.claude_client),
+            session_manager: Arc::clone(&self.session_manager),
+            tool_manager: Arc::clone(&self.tool_manager),
+        }
+    }
 }
 
 /// Start the HTTP API server
