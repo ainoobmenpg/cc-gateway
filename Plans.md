@@ -16,9 +16,9 @@
 | Phase 11 | ✅ 完了 | CLI非対話モード |
 | Phase 12 | ✅ 完了 | HTTP API拡張 |
 | Phase 13 | ✅ 完了 | テスト追加 |
-| **Phase 14** | ⬜ 未着手 | セキュリティ修正（即時） |
-| **Phase 15** | ⬜ 未着手 | 安定性修正（短期） |
-| **Phase 16** | ⬜ 未着手 | 品質改善（中期） |
+| Phase 14 | ✅ 完了 | セキュリティ修正（認証・CORS） |
+| Phase 15 | ✅ 完了 | 安定性修正（MutexGuard・エラー処理） |
+| Phase 16 | ✅ 完了 | 品質改善（clippy修正） |
 
 ---
 
@@ -32,9 +32,9 @@
 
 ---
 
-## Phase 14: セキュリティ修正（即時）[feature:security] [⬜ 未着手]
+## Phase 14: セキュリティ修正（即時）[feature:security] [✅ 完了]
 
-> レビュー指摘: CRITICAL - 認証ミドルウェアが適用されていない
+> コミット: 1e71eb4
 
 ### タスク 14.1: 認証ミドルウェアの適用
 
@@ -64,7 +64,7 @@ curl http://localhost:3000/health
 
 ---
 
-## Phase 15: 安定性修正（短期）[⬜ 未着手]
+## Phase 15: 安定性修正（短期）[✅ 完了]
 
 > レビュー指摘: MAJOR - MutexGuard await 問題、環境変数サイレント失敗、パニック
 
@@ -118,7 +118,7 @@ tokio::spawn(async move {
 
 ---
 
-## Phase 16: 品質改善（中期）[⬜ 未着手]
+## Phase 16: 品質改善（中期）[✅ 完了]
 
 > レビュー指摘: MINOR - clippy 警告、テストカバレッジ不足
 
