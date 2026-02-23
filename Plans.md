@@ -11,8 +11,8 @@
 | Phase | 状態 | 内容 |
 |-------|------|------|
 | Phase 1-16 | ✅ 完了 | コア機能 + セキュリティ/安定性/品質修正 |
-| Phase 17 | 🔲 未着手 | Discord Bot改善（poise移行） |
-| Phase 18 | 🔲 検討中 | スケジューラー改善 |
+| Phase 17 | ✅ 完了 | Discord Bot改善（poise移行） |
+| Phase 18 | ✅ 完了 | スケジューラー改善（現状維持判定） |
 | Phase 19 | ✅ 完了 | MCP統合（McpRegistry実装済み） |
 
 > 📦 過去の完了タスク: `.claude/memory/archive/Plans-2026-02-24.md`
@@ -23,12 +23,12 @@
 
 | 優先度 | Phase | 内容 | 判定 |
 |--------|-------|------|------|
-| **Recommended** | 17 | Discord Bot poise移行 | 実装推奨 |
-| **Optional** | 18 | スケジューラー改善 | 現状維持推奨 |
+| **Recommended** | 17 | Discord Bot poise移行 | ✅ 完了 |
+| **Optional** | 18 | スケジューラー改善 | ✅ 現状維持 |
 
 ---
 
-## Phase 17: Discord Bot改善（poise移行）[feature:tdd] [🔲 未着手]
+## Phase 17: Discord Bot改善（poise移行）[feature:tdd] [✅ 完了]
 
 > 外部フィードバック提案: serenity → poise でスラッシュコマンド改善
 
@@ -42,11 +42,11 @@
 
 ### タスク
 
-- [ ] 17.1: `cc-discord/Cargo.toml` に `poise = "0.6"` 追加
-- [ ] 17.2: `/ask` コマンドを poise で再実装
-- [ ] 17.3: `/clear` コマンドを poise で再実装
-- [ ] 17.4: `/help` コマンドを poise で再実装
-- [ ] 17.5: `handler.rs` を poise Framework に置き換え
+- [x] 17.1: `cc-discord/Cargo.toml` に `poise = "0.6"` 追加
+- [x] 17.2: `/ask` コマンドを poise で再実装
+- [x] 17.3: `/clear` コマンドを poise で再実装
+- [x] 17.4: `/help` コマンドを poise で再実装
+- [x] 17.5: `handler.rs` を poise Framework に置き換え
 
 ### 検証
 
@@ -56,7 +56,7 @@ cargo test -p cc-discord
 
 ---
 
-## Phase 18: スケジューラー改善 [🔲 検討中]
+## Phase 18: スケジューラー改善 [✅ 完了]
 
 > 外部フィードバック提案: tokio-cron-scheduler 導入
 
@@ -70,19 +70,19 @@ cargo test -p cc-discord
 
 ### タスク
 
-- [ ] 18.1: 機能不足がないか最終確認 → 見送り判定予定
+- [x] 18.1: 機能不足がないか最終確認 → **現状維持判定**
 
 ---
 
-## 🚀 次のアクション
+## 🚀 全 Phase 完了！
 
-```bash
-# Phase 17 を実装
-/work 17
+すべての計画された Phase が完了しました。
 
-# 全タスク実行
-/work all
-```
+### 完了コミット
+- Phase 17-18: `de31e6a`
+
+### 次のステップ
+新規機能追加や改善が必要な場合は、Plans.md に新しい Phase を追加してください。
 
 ---
 
