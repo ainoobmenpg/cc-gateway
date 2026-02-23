@@ -1,38 +1,38 @@
 # cc-gateway
 
-> Pure Rust Claude API Gateway - OpenClaw alternative with GLM support
+> Pure Rust Claude API Gateway - OpenClaw 代替実装（GLM 対応）
 
-A high-performance gateway for Claude API and OpenAI-compatible APIs (GLM Coding Plan), written in Rust.
+Claude API と OpenAI 互換 API（GLM Coding Plan など）に対応した高性能ゲートウェイ。Rust で実装されています。
 
-## Features
+## 機能
 
-- **Multiple LLM Providers**: Supports both Anthropic Claude API and OpenAI-compatible APIs (GLM, etc.)
-- **CLI Interactive Mode**: OpenClaw-like REPL for direct interaction
-- **HTTP API**: RESTful API server with authentication
-- **Discord Bot**: Full-featured Discord integration with slash commands
-- **MCP Integration**: Model Context Protocol support for external tools
-- **Built-in Tools**: bash, read, write, edit, glob, grep
+- **マルチ LLM プロバイダー**: Anthropic Claude API と OpenAI 互換 API（GLM 等）の両方に対応
+- **CLI 対話モード**: OpenClaw 風の REPL で直接対話
+- **HTTP API**: 認証付き RESTful API サーバー
+- **Discord Bot**: スラッシュコマンド対応のフル機能 Discord 連携
+- **MCP 統合**: Model Context Protocol による外部ツール対応
+- **組み込みツール**: bash, read, write, edit, glob, grep
 
-## Installation
+## インストール
 
 ```bash
-# Clone
+# クローン
 git clone https://github.com/ainoobmenpg/cc-gateway.git
 cd cc-gateway
 
-# Build
+# ビルド
 cargo build --release
 
-# Run
+# 実行
 ./target/release/cc-gateway --help
 ```
 
-## Usage
+## 使用方法
 
-### CLI Mode (OpenClaw-like)
+### CLI モード（OpenClaw 風）
 
 ```bash
-# Start interactive REPL
+# 対話型 REPL を起動
 cargo run -- --cli
 ```
 
@@ -55,73 +55,73 @@ cargo run -- --cli
   /history      - Show conversation history
 ```
 
-### Server Mode
+### サーバーモード
 
 ```bash
-# Start HTTP API + Discord Bot
+# HTTP API + Discord Bot を起動
 cargo run
 ```
 
 ### HTTP API
 
 ```bash
-# Health check
+# ヘルスチェック
 curl http://localhost:3000/health
 
-# Chat
+# チャット
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello!"}'
 ```
 
-## Configuration
+## 設定
 
-Create a `.env` file:
+`.env` ファイルを作成：
 
 ```bash
-# LLM Configuration (Required)
+# LLM 設定（必須）
 LLM_API_KEY=your-api-key
 LLM_MODEL=glm-4.7
-LLM_PROVIDER=openai  # claude or openai
+LLM_PROVIDER=openai  # claude または openai
 LLM_BASE_URL=https://api.z.ai/api/coding/paas/v4
 
-# Discord Bot (Optional)
+# Discord Bot（オプション）
 DISCORD_BOT_TOKEN=your-bot-token
 ADMIN_USER_IDS=123456789,987654321
 
-# HTTP API (Optional)
+# HTTP API（オプション）
 API_KEY=your-api-key
 API_PORT=3000
 
-# MCP Integration (Optional)
+# MCP 統合（オプション）
 MCP_ENABLED=true
 MCP_CONFIG_PATH=mcp.json
 ```
 
-## Architecture
+## アーキテクチャ
 
 ```
 cc-gateway (workspace)
 ├── crates/
-│   ├── cc-core/        # Core library (Tool trait, LLM client, Session, Memory)
-│   ├── cc-tools/       # Built-in tools (Bash, Read, Write, Edit, Glob, Grep)
-│   ├── cc-mcp/         # MCP client integration (rmcp)
+│   ├── cc-core/        # コアライブラリ (Tool trait, LLM client, Session, Memory)
+│   ├── cc-tools/       # 組み込みツール (Bash, Read, Write, Edit, Glob, Grep)
+│   ├── cc-mcp/         # MCP クライアント統合 (rmcp)
 │   ├── cc-discord/     # Discord Gateway (Serenity)
 │   ├── cc-api/         # HTTP API (axum)
-│   └── cc-gateway/     # Main binary
+│   └── cc-gateway/     # メインバイナリ
 ```
 
-## Supported Providers
+## 対応プロバイダー
 
-| Provider | Type | Base URL |
-|----------|------|----------|
+| プロバイダー | タイプ | ベース URL |
+|------------|--------|-----------|
 | Anthropic Claude | `claude` | `https://api.anthropic.com/v1` |
 | GLM Coding Plan | `openai` | `https://api.z.ai/api/coding/paas/v4` |
 | OpenAI | `openai` | `https://api.openai.com/v1` |
 
-## MCP Integration
+## MCP 統合
 
-Create `mcp.json`:
+`mcp.json` を作成：
 
 ```json
 {
@@ -135,38 +135,38 @@ Create `mcp.json`:
 }
 ```
 
-## Development
+## 開発
 
 ```bash
-# Build
+# ビルド
 cargo build
 
-# Test
+# テスト
 cargo test
 
 # Lint
 cargo clippy --all-targets --all-features -- -D warnings
 
-# Format
+# フォーマット
 cargo fmt
 ```
 
-## Tech Stack
+## 技術スタック
 
-- **Language**: Rust 2024 Edition (rustc 1.85+)
-- **Async Runtime**: tokio
-- **HTTP Client**: reqwest (rustls-tls)
-- **HTTP Server**: axum
+- **言語**: Rust 2024 Edition (rustc 1.85+)
+- **非同期ランタイム**: tokio
+- **HTTP クライアント**: reqwest (rustls-tls)
+- **HTTP サーバー**: axum
 - **Discord**: serenity
 - **MCP**: rmcp
-- **Database**: rusqlite (bundled)
+- **データベース**: rusqlite (bundled)
 
-## License
+## ライセンス
 
 MIT
 
-## Acknowledgments
+## 謝辞
 
-- [OpenClaw](https://openclaw.ai) - Inspiration for this project
+- [OpenClaw](https://openclaw.ai) - 本プロジェクトのインスピレーション
 - [Anthropic](https://anthropic.com) - Claude API
 - [Z.ai](https://z.ai) - GLM Coding Plan

@@ -19,9 +19,9 @@ pub struct CliConfig {
 impl Default for CliConfig {
     fn default() -> Self {
         Self {
-            system_prompt: "You are a helpful AI assistant with access to tools. \
-                Respond in the same language as the user. \
-                Use tools when needed to help the user."
+            system_prompt: "あなたはツールにアクセスできる便利な AI アシスタントです。\
+                ユーザーと同じ言語で応答してください。\
+                必要に応じてツールを使用してユーザーを支援してください。"
                 .to_string(),
             max_iterations: 10,
         }
@@ -100,12 +100,12 @@ fn handle_command(input: &str, messages: &[cc_core::Message]) -> bool {
 
     match lower.as_str() {
         "/exit" | "/quit" | "/q" => {
-            println!("\n👋 Goodbye!\n");
+            println!("\n👋 さようなら！\n");
             std::process::exit(0);
         }
         "/clear" => {
             // Note: We can't clear messages from here since it's borrowed
-            println!("\n✅ Conversation cleared.\n");
+            println!("\n✅ 会話履歴をクリアしました。\n");
             true
         }
         "/help" | "/?" => {
@@ -117,7 +117,7 @@ fn handle_command(input: &str, messages: &[cc_core::Message]) -> bool {
             true
         }
         _ if lower.starts_with('/') => {
-            eprintln!("\n❓ Unknown command: {}. Type /help for available commands.\n", input);
+            eprintln!("\n❓ 不明なコマンド: {}。/help でコマンド一覧を確認してください。\n", input);
             true
         }
         _ => false,
@@ -137,7 +137,7 @@ async fn run_agent_turn(
     loop {
         iterations += 1;
         if iterations > max_iterations {
-            return Ok("Max iterations reached. Please try again with a simpler request.".to_string());
+            return Ok("最大反復回数に達しました。よりシンプルなリクエストで再試行してください。".to_string());
         }
 
         // Build request
@@ -207,9 +207,9 @@ async fn run_agent_turn(
 
                     // Show tool execution to user
                     if result.is_error {
-                        eprintln!("\n⚙️ Tool {} failed: {}", name, result.output);
+                        eprintln!("\n⚙️ ツール {} の実行に失敗: {}", name, result.output);
                     } else {
-                        println!("\n⚙️ Tool {} executed successfully", name);
+                        println!("\n⚙️ ツール {} を実行しました", name);
                     }
                 }
 
@@ -243,10 +243,10 @@ fn get_tool_definitions(tool_manager: &ToolManager) -> Vec<ToolDefinition> {
 fn print_welcome() {
     println!();
     println!("╔════════════════════════════════════════════════════════════╗");
-    println!("║          🤖 cc-gateway CLI - Interactive Mode              ║");
+    println!("║          🤖 cc-gateway CLI - 対話モード                    ║");
     println!("╠════════════════════════════════════════════════════════════╣");
-    println!("║  Type your message and press Enter to chat.                ║");
-    println!("║  Commands: /help, /exit, /clear, /history                  ║");
+    println!("║  メッセージを入力して Enter でチャット開始                  ║");
+    println!("║  コマンド: /help, /exit, /clear, /history                  ║");
     println!("╚════════════════════════════════════════════════════════════╝");
     println!();
 }
@@ -254,23 +254,23 @@ fn print_welcome() {
 /// Print help message
 fn print_help() {
     println!();
-    println!("📖 Available Commands:");
-    println!("  /help, /?     - Show this help message");
-    println!("  /exit, /quit  - Exit the program");
-    println!("  /clear        - Clear conversation history");
-    println!("  /history      - Show conversation history");
+    println!("📖 利用可能なコマンド:");
+    println!("  /help, /?     - ヘルプを表示");
+    println!("  /exit, /quit  - プログラムを終了");
+    println!("  /clear        - 会話履歴をクリア");
+    println!("  /history      - 会話履歴を表示");
     println!();
 }
 
 /// Print conversation history
 fn print_history(messages: &[cc_core::Message]) {
     println!();
-    println!("📜 Conversation History ({} messages):", messages.len());
+    println!("📜 会話履歴 ({} 件):", messages.len());
     println!("{}", "─".repeat(50));
 
     for (i, msg) in messages.iter().enumerate() {
         let role = match msg.role.as_str() {
-            "user" => "👤 You",
+            "user" => "👤 あなた",
             "assistant" => "🤖 AI",
             _ => &msg.role,
         };
