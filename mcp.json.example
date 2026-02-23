@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "servers": [
+    {
+      "name": "git",
+      "command": "uvx mcp-server-git",
+      "enabled": true
+    },
+    {
+      "name": "filesystem",
+      "command": "npx -y @modelcontextprotocol/server-filesystem /path/to/allowed/directory",
+      "enabled": true,
+      "env": {
+        "NODE_OPTIONS": "--max-old-space-size=4096"
+      }
+    },
+    {
+      "name": "brave-search",
+      "command": "npx -y @modelcontextprotocol/server-brave-search",
+      "enabled": false,
+      "env": {
+        "BRAVE_API_KEY": "your-api-key-here"
+      }
+    }
+  ]
+}

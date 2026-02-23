@@ -1,0 +1,37 @@
+[package]
+name = "cc-gateway"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "cc-gateway"
+path = "src/main.rs"
+
+[dependencies]
+# Async
+tokio.workspace = true
+
+# Internal crates
+cc-core.workspace = true
+cc-tools.workspace = true
+cc-mcp.workspace = true
+cc-discord.workspace = true
+cc-api.workspace = true
+
+# Configuration
+config.workspace = true
+dotenvy.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true

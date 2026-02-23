@@ -1,0 +1,74 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cc-core",
+    "crates/cc-tools",
+    "crates/cc-mcp",
+    "crates/cc-discord",
+    "crates/cc-api",
+    "crates/cc-gateway",  # main binary
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Claude Code User"]
+license = "MIT"
+repository = "https://github.com/user/cc-gateway"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP client & server
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# Discord
+serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Database
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# MCP
+rmcp = { version = "0.16", features = ["client", "transport-child-process"] }
+
+# Scheduling
+cron = "0.15"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Utilities
+async-trait = "0.1"
+futures = "0.3"
+uuid = { version = "1", features = ["v4", "serde"] }
+regex = "1"
+glob = "0.3"
+grep = "0.3"  # ripgrep library
+dashmap = "5.5"  # Concurrent map
+
+# Configuration
+config = "0.15"
+dotenvy = "0.15"
+
+# Internal crates
+cc-core = { path = "crates/cc-core" }
+cc-tools = { path = "crates/cc-tools" }
+cc-mcp = { path = "crates/cc-mcp" }
+cc-discord = { path = "crates/cc-discord" }
+cc-api = { path = "crates/cc-api" }

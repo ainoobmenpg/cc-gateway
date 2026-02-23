@@ -1,0 +1,41 @@
+# Build
+/target/
+**/*.rs.bk
+
+# Dependencies
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Data
+data/
+*.db
+*.db-journal
+
+# Logs
+*.log
+logs/
+
+# MCP config (may contain sensitive data)
+mcp.json
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Claude Code state
+.claude/
