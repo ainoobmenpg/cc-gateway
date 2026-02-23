@@ -11,148 +11,164 @@
 | Phase | 状態 | 内容 |
 |-------|------|------|
 | Phase 1-8 | ✅ 完了 | コア機能（CLI/API/Discord/MCP/スケジューラー） |
-| Phase 9 | ⬜ 未着手 | TOML設定ファイル対応 |
-| Phase 10 | ⬜ 未着手 | エラーハンドリング改善 |
-| Phase 11 | ⬜ 未着手 | CLI非対話モード |
-| Phase 12 | ⬜ 未着手 | HTTP API拡張 |
-| Phase 13 | ⬜ 未着手 | テスト追加 |
+| Phase 9 | ✅ 完了 | TOML設定ファイル対応 |
+| Phase 10 | ✅ 完了 | エラーハンドリング改善（thiserror） |
+| Phase 11 | ✅ 完了 | CLI非対話モード |
+| Phase 12 | ✅ 完了 | HTTP API拡張 |
+| Phase 13 | ✅ 完了 | テスト追加 |
+| **Phase 14** | ⬜ 未着手 | セキュリティ修正（即時） |
+| **Phase 15** | ⬜ 未着手 | 安定性修正（短期） |
+| **Phase 16** | ⬜ 未着手 | 品質改善（中期） |
 
 ---
 
-## 🎯 優先度マトリックス（改善フェーズ）
+## 🎯 優先度マトリックス（レビュー指摘対応）
 
-| 優先度 | Phase | 内容 | 理由 |
+| 優先度 | Phase | 内容 | 影響 |
 |--------|-------|------|------|
-| **必須** | 9 | TOML設定ファイル | 型安全性、ドキュメント性 |
-| **必須** | 10 | thiserror導入 | エラー処理の統一 |
-| **推奨** | 11 | CLI非対話モード | スクリプト連携 |
-| **推奨** | 12 | HTTP API拡張 | セッション管理 |
-| **推奨** | 13 | テスト追加 | 品質保証 |
+| **Required** | 14 | セキュリティ修正 | 認証未適用、CORS 全許可 |
+| **Recommended** | 15 | 安定性修正 | デッドロック、パニック |
+| **Optional** | 16 | 品質改善 | clippy 警告、テスト不足 |
 
 ---
 
-## Phase 9: TOML設定ファイル対応 [⬜ 未着手]
+## Phase 14: セキュリティ修正（即時）[feature:security] [⬜ 未着手]
 
-### タスク
+> レビュー指摘: CRITICAL - 認証ミドルウェアが適用されていない
 
-- [ ] 9.1 `cc-gateway.toml` 形式定義
-- [ ] 9.2 `config` crate 統合
-- [ ] 9.3 環境変数展開（`${VAR}`）
-- [ ] 9.4 .env からの移行
-- [ ] 9.5 `cc-gateway.toml.example` 作成
+### タスク 14.1: 認証ミドルウェアの適用
 
-### 設定ファイル仕様
+- [ ] `cc-api/src/server.rs` で `auth_middleware` をルートに適用
+- [ ] `/health` エンドポイントは認証除外
+- [ ] 設定: `API_KEY` 環境変数で制御
+- [ ] テスト: 認証なしで保護エンドポイントにアクセスすると 401
 
-```toml
-[llm]
-provider = "openai"
-model = "glm-4.7"
-base_url = "https://api.z.ai/api/coding/paas/v4"
-api_key = "${LLM_API_KEY}"
+### タスク 14.2: CORS 設定の制限
 
-[discord]
-token = "${DISCORD_BOT_TOKEN}"
-admin_user_ids = [123456789]
+- [ ] `CorsLayer::permissive()` を制限的設定に変更
+- [ ] 設定ファイルから許可オリジンを読み込み（`[api].allowed_origins`）
+- [ ] デフォルト: `["http://localhost:*"]` のみ許可
+- [ ] テスト: 不正オリジンからのリクエストを拒否
 
-[api]
-port = 3000
+### 検証
 
-[scheduler]
-enabled = true
-config_path = "schedule.toml"
+```bash
+# API_KEY 設定時: 認証なしで 401
+curl -X POST http://localhost:3000/api/chat -d '{"message":"test"}'
+# 期待: 401 Unauthorized
 
-[mcp]
-enabled = true
-config_path = "mcp.json"
+# /health は認証不要
+curl http://localhost:3000/health
+# 期待: OK
 ```
 
 ---
 
-## Phase 10: エラーハンドリング改善 [⬜ 未着手]
+## Phase 15: 安定性修正（短期）[⬜ 未着手]
 
-### タスク
+> レビュー指摘: MAJOR - MutexGuard await 問題、環境変数サイレント失敗、パニック
 
-- [ ] 10.1 `cc-core/src/error.rs` 作成
-- [ ] 10.2 thiserror でエラー型定義
-- [ ] 10.3 anyhow から移行
+### タスク 15.1: MutexGuard の await 問題修正
 
-### エラー型定義
+- [ ] `cc-core/session/manager.rs` で MutexGuard を await 前にドロップ
+- [ ] パターン: スコープで囲んで早期解放
 
 ```rust
-#[derive(Error, Debug)]
-pub enum CcError {
-    #[error("LLM API error: {0}")]
-    LlmApi(String),
-    #[error("Tool execution error: {0}")]
-    ToolExecution(String),
-    #[error("Session not found: {0}")]
-    SessionNotFound(String),
-    #[error("Configuration error: {0}")]
-    Config(String),
-}
+// Before (問題あり)
+let store = self.store.lock().unwrap();
+let session = store.get_latest_by_channel(channel_id)?;
+let mut cache = self.cache.write().await; // MutexGuard 保持したまま await
+
+// After (修正済み)
+let session = {
+    let store = self.store.lock().unwrap();
+    store.get_latest_by_channel(channel_id)?
+}; // MutexGuard ここで解放
+let mut cache = self.cache.write().await; // 安全
 ```
 
----
+- [ ] テスト: 並行アクセスでデッドロックしないことを確認
 
-## Phase 11: CLI非対話モード [⬜ 未着手]
+### タスク 15.2: 必須環境変数のバリデーション
 
-### タスク
+- [ ] `cc-core/src/config.rs` で必須環境変数チェック追加
+- [ ] `${LLM_API_KEY}` が未設定の場合は **警告ログ + エラー**
+- [ ] 設定ファイルに `required_env_vars = ["LLM_API_KEY"]` オプション追加
+- [ ] テスト: 必須変数未設定で起動エラーになることを確認
 
-- [ ] 11.1 `--execute "プロンプト"` オプション
-- [ ] 11.2 `--file prompt.txt` オプション
-- [ ] 11.3 `--session-id ID` オプション
-- [ ] 11.4 終了コード設定
+### タスク 15.3: Discord Bot エラーハンドリング
 
-### 使用例
+- [ ] `cc-discord/src/bot.rs` の `unwrap()` を適切なエラーハンドリングに変更
 
-```bash
-# ワンショット実行
-cc-gateway --execute "今日の天気は？"
+```rust
+// Before (パニックのリスク)
+tokio::spawn(async move {
+    store_clone.start_cleanup_task().await.unwrap();
+});
 
-# ファイルから実行
-cc-gateway --file prompt.txt
-
-# セッション継続
-cc-gateway --session-id abc123 --cli
+// After (安全)
+tokio::spawn(async move {
+    if let Err(e) = store_clone.start_cleanup_task().await {
+        tracing::error!("Cleanup task failed: {}", e);
+    }
+});
 ```
 
----
-
-## Phase 12: HTTP API拡張 [⬜ 未着手]
-
-### タスク
-
-- [ ] 12.1 `POST /api/sessions` - セッション作成
-- [ ] 12.2 `GET /api/sessions/:id` - セッション取得
-- [ ] 12.3 `DELETE /api/sessions/:id` - セッション削除
-- [ ] 12.4 `GET /api/tools` - ツール一覧
-- [ ] 12.5 `POST /api/tools/:name` - ツール実行
-- [ ] 12.6 `GET /api/schedules` - スケジュール一覧
+- [ ] テスト: クリーンアップタスクでエラーが起きても bot が継続
 
 ---
 
-## Phase 13: テスト追加 [⬜ 未着手]
+## Phase 16: 品質改善（中期）[⬜ 未着手]
 
-### タスク
+> レビュー指摘: MINOR - clippy 警告、テストカバレッジ不足
 
-- [ ] 13.1 ツール単体テスト（bash, read, write）
-- [ ] 13.2 セッション永続化テスト
-- [ ] 13.3 LLMクライアントモックテスト
-- [ ] 13.4 HTTP API統合テスト
+### タスク 16.1: clippy 警告の解消
+
+- [ ] `cc-discord` の `impl Clone` を derive に変更
+- [ ] Error enum のサイズ削減（`Box<dyn Error>` 化検討）
+- [ ] ドキュメント後の空行削除
+- [ ] `cargo clippy --fix` で自動修正
+- [ ] CI で `cargo clippy -- -D warnings` を通す
+
+### タスク 16.2: テストカバレッジ向上
+
+#### cc-api ハンドラーテスト
+
+- [ ] `chat` handler テスト（正常系・エラー系）
+- [ ] `create_session` / `get_session` / `delete_session` テスト
+- [ ] `list_tools` / `execute_tool` テスト
+
+#### cc-discord テスト
+
+- [ ] `/ask` コマンドテスト
+- [ ] `/clear` コマンドテスト
+- [ ] `/help` コマンドテスト
+
+#### cc-schedule テスト
+
+- [ ] cron パース追加テスト（境界値）
+- [ ] スケジュール実行テスト（モック使用）
 
 ---
 
-## 🚀 使用方法（現状）
+## ✅ 完了フェーズ概要
 
-```bash
-# CLI対話モード
-cargo run -- --cli
+### Phase 9-13（2026-02-24 完了）
 
-# サーバーモード
-cargo run
+| Phase | 内容 | コミット |
+|-------|------|---------|
+| 9 | TOML設定ファイル + 環境変数展開 | 5866b1e |
+| 10 | thiserror エラー型定義 | 5866b1e |
+| 11 | `--execute` / `--file` オプション | 5866b1e |
+| 12 | Sessions/Tools/Schedules API | 5866b1e, 7631df3 |
+| 13 | 56 テスト追加 | 800819e |
 
-# ヘルプ
-cargo run -- --help
+---
+
+## 🚀 実行順序
+
+```
+Phase 14 (セキュリティ) → Phase 15 (安定性) → Phase 16 (品質)
 ```
 
 ---

@@ -206,6 +206,7 @@ dependencies = [
  "axum",
  "cc-core",
  "chrono",
+ "http",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

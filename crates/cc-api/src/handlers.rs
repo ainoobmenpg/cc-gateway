@@ -5,7 +5,6 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -236,23 +235,22 @@ impl From<Session> for SessionDetailResponse {
 pub async fn create_session(
     State(state): State<AppState>,
     Json(req): Json<CreateSessionRequest>,
-) -> impl IntoResponse {
+) -> Result<Json<SessionDetailResponse>, (StatusCode, Json<ErrorResponse>)> {
     debug!("Create session request: channel_id={}", req.channel_id);
 
     match state.session_manager.get_or_create(&req.channel_id).await {
         Ok(session) => {
             info!("Created session: {} for channel: {}", session.id, req.channel_id);
-            Json(SessionDetailResponse::from(session)).into_response()
+            Ok(Json(SessionDetailResponse::from(session)))
         }
         Err(e) => {
             error!("Failed to create session: {}", e);
-            (
+            Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
                     error: format!("Failed to create session: {}", e),
                 }),
-            )
-                .into_response()
+            ))
         }
     }
 }
@@ -261,19 +259,18 @@ pub async fn create_session(
 pub async fn get_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
-) -> impl IntoResponse {
+) -> Result<Json<SessionDetailResponse>, (StatusCode, Json<ErrorResponse>)> {
     debug!("Get session request: id={}", session_id);
 
     // SessionManager の公開メソッドを使用
     match state.session_manager.get_cached_session(&session_id).await {
-        Some(session) => Json(SessionDetailResponse::from(session)).into_response(),
-        None => (
+        Some(session) => Ok(Json(SessionDetailResponse::from(session))),
+        None => Err((
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
                 error: format!("Session not found: {}", session_id),
             }),
-        )
-            .into_response(),
+        )),
     }
 }
 
@@ -281,7 +278,7 @@ pub async fn get_session(
 pub async fn delete_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     debug!("Delete session request: id={}", session_id);
 
     // SessionManager の公開メソッドを使用
@@ -291,34 +288,32 @@ pub async fn delete_session(
             match state.session_manager.delete_session(&channel_id).await {
                 Ok(()) => {
                     info!("Deleted session: {}", session_id);
-                    StatusCode::NO_CONTENT.into_response()
+                    Ok(StatusCode::NO_CONTENT)
                 }
                 Err(e) => {
                     error!("Failed to delete session from store: {}", e);
-                    (
+                    Err((
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ErrorResponse {
                             error: format!("Failed to delete session: {}", e),
                         }),
-                    )
-                        .into_response()
+                    ))
                 }
             }
         }
-        None => (
+        None => Err((
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
                 error: format!("Session not found: {}", session_id),
             }),
-        )
-            .into_response(),
+        )),
     }
 }
 
 /// List all sessions
 pub async fn list_sessions(
     State(state): State<AppState>,
-) -> impl IntoResponse {
+) -> Json<SessionsListResponse> {
     debug!("List sessions request");
 
     let sessions = state.session_manager.list_cached_sessions().await;
@@ -331,7 +326,6 @@ pub async fn list_sessions(
         total: session_responses.len(),
         sessions: session_responses,
     })
-    .into_response()
 }
 
 // ============================================================================
@@ -370,7 +364,7 @@ pub struct ToolExecutionResponse {
 /// List all available tools
 pub async fn list_tools(
     State(state): State<AppState>,
-) -> impl IntoResponse {
+) -> Json<ToolsListResponse> {
     debug!("List tools request");
 
     let definitions = state.tool_manager.definitions();
@@ -394,7 +388,7 @@ pub async fn execute_tool(
     State(state): State<AppState>,
     Path(tool_name): Path<String>,
     Json(req): Json<ExecuteToolRequest>,
-) -> impl IntoResponse {
+) -> Json<ToolExecutionResponse> {
     debug!("Execute tool request: tool={}", tool_name);
 
     match state.tool_manager.execute(&tool_name, req.input).await {

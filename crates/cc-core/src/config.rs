@@ -13,18 +13,15 @@ use std::path::Path;
 /// LLM Provider type
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum LlmProvider {
     /// Anthropic Claude API
+    #[default]
     Claude,
     /// OpenAI-compatible API (GLM, etc.)
     OpenAi,
 }
 
-impl Default for LlmProvider {
-    fn default() -> Self {
-        Self::Claude
-    }
-}
 
 /// LLM configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +94,10 @@ pub struct Config {
     /// Scheduler configuration
     #[serde(default)]
     pub scheduler: SchedulerConfig,
+
+    /// API key for HTTP API (shorthand for api.key)
+    #[serde(skip_serializing)]
+    pub api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,6 +108,11 @@ pub struct ApiConfig {
     /// Port for HTTP API server
     #[serde(default = "default_api_port")]
     pub port: u16,
+
+    /// Allowed CORS origins (e.g., ["http://localhost:3000", "https://example.com"])
+    /// If empty, defaults to localhost only
+    #[serde(default)]
+    pub allowed_origins: Option<Vec<String>>,
 }
 
 impl Default for ApiConfig {
@@ -114,6 +120,7 @@ impl Default for ApiConfig {
         Self {
             key: None,
             port: default_api_port(),
+            allowed_origins: None,
         }
     }
 }
@@ -299,8 +306,9 @@ impl Config {
         // API 設定
         let api = toml.api.unwrap_or_default();
         let api_config = ApiConfig {
-            key: api.key,
+            key: api.key.clone(),
             port: api.port.unwrap_or_else(default_api_port),
+            allowed_origins: api.allowed_origins,
         };
 
         // Memory 設定
@@ -329,7 +337,8 @@ impl Config {
             claude_model: llm_config.model.clone(),
             discord_token: discord.token,
             admin_user_ids: admin_ids,
-            api: api_config,
+            api: api_config.clone(),
+            api_key: api_config.key,
             memory: memory_config,
             mcp: mcp_config,
             scheduler: scheduler_config,
@@ -381,12 +390,20 @@ impl Config {
 
         // API 設定の上書き
         if let Ok(key) = std::env::var("API_KEY") {
-            self.api.key = Some(key);
+            self.api.key = Some(key.clone());
+            self.api_key = Some(key);
         }
         if let Ok(port) = std::env::var("API_PORT") {
             if let Ok(p) = port.parse() {
                 self.api.port = p;
             }
+        }
+        if let Ok(origins) = std::env::var("API_ALLOWED_ORIGINS") {
+            self.api.allowed_origins = Some(
+                origins.split(',')
+                    .map(|s| s.trim().to_string())
+                    .collect()
+            );
         }
 
         // Memory 設定の上書き
@@ -441,7 +458,7 @@ impl Config {
 
         Ok(Config {
             llm: llm_config,
-            claude_api_key: api_key,
+            claude_api_key: api_key.clone(),
             claude_model: model,
             discord_token: std::env::var("DISCORD_BOT_TOKEN").ok(),
             admin_user_ids: std::env::var("ADMIN_USER_IDS")
@@ -453,7 +470,11 @@ impl Config {
                     .ok()
                     .and_then(|p| p.parse().ok())
                     .unwrap_or(default_api_port()),
+                allowed_origins: std::env::var("API_ALLOWED_ORIGINS")
+                    .ok()
+                    .map(|s| s.split(',').map(|s| s.trim().to_string()).collect()),
             },
+            api_key: std::env::var("API_KEY").ok(),
             memory: MemoryConfig {
                 db_path: std::env::var("DB_PATH")
                     .unwrap_or_else(|_| default_db_path()),
@@ -534,6 +555,9 @@ struct TomlApiConfig {
     /// ポート番号
     #[serde(default)]
     port: Option<u16>,
+    /// 許可する CORS オリジン
+    #[serde(default)]
+    allowed_origins: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -684,6 +708,7 @@ mod tests {
             discord_token: None,
             admin_user_ids: vec![],
             api: ApiConfig::default(),
+            api_key: None,
             memory: MemoryConfig::default(),
             mcp: McpConfig::default(),
             scheduler: SchedulerConfig::default(),

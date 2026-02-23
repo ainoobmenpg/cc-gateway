@@ -62,15 +62,17 @@ impl SessionManager {
         }
 
         // Try to load from store
-        {
+        let session_from_store = {
             let store = self.store.lock().unwrap();
-            if let Some(session) = store.get_latest_by_channel(channel_id)? {
-                debug!("Session loaded from store for channel: {}", channel_id);
-                // Add to cache
-                let mut cache = self.cache.write().await;
-                cache.insert(channel_id.to_string(), session.clone());
-                return Ok(session);
-            }
+            store.get_latest_by_channel(channel_id)?
+        }; // MutexGuard dropped here before await
+
+        if let Some(session) = session_from_store {
+            debug!("Session loaded from store for channel: {}", channel_id);
+            // Add to cache
+            let mut cache = self.cache.write().await;
+            cache.insert(channel_id.to_string(), session.clone());
+            return Ok(session);
         }
 
         // Create new session

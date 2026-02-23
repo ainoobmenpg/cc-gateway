@@ -35,7 +35,9 @@ impl DiscordBot {
         // Start session cleanup task
         let store_clone = session_store.clone();
         tokio::spawn(async move {
-            store_clone.start_cleanup_task().await.unwrap();
+            if let Err(e) = store_clone.start_cleanup_task().await {
+                tracing::error!("Session cleanup task failed: {}", e);
+            }
         });
 
         Self {
