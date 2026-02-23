@@ -242,7 +242,7 @@ pub async fn create_session(
     match state.session_manager.get_or_create(&req.channel_id).await {
         Ok(session) => {
             info!("Created session: {} for channel: {}", session.id, req.channel_id);
-            Json(SessionDetailResponse::from(session)).into_response()
+            Json(SessionDetailResponse::from(session))
         }
         Err(e) => {
             error!("Failed to create session: {}", e);
@@ -252,7 +252,6 @@ pub async fn create_session(
                     error: format!("Failed to create session: {}", e),
                 }),
             )
-                .into_response()
         }
     }
 }

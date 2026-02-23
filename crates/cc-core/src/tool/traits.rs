@@ -40,7 +40,7 @@ impl ToolResult {
 /// Implement this trait to create custom tools that can be
 /// executed when Claude requests them via tool_use.
 #[async_trait]
-pub trait Tool: Send + Sync {
+pub trait Tool: Send + Sync + 'static {
     /// Get the tool name (used in Claude API tool definitions)
     fn name(&self) -> &str;
 
