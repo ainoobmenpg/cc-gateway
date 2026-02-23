@@ -1,17 +1,14 @@
-//! /help command - Show help information
+//! /help command - Show help information (poise implementation)
 
-use serenity::all::{CommandInteraction, CreateCommand};
+use crate::commands::Data;
+use crate::error::Result;
 
-/// Register the /help command
-pub fn register_help_command(command: CreateCommand) -> CreateCommand {
-    command
-        .name("help")
-        .description("Show help information about the bot")
-}
-
-/// Run the /help command
-pub async fn run(_interaction: &CommandInteraction) -> String {
-    r#"**Claude Code Gateway Bot**
+/// Show help information about the bot
+#[poise::command(slash_command, rename = "help")]
+pub async fn help(
+    ctx: poise::Context<'_, Data, crate::error::DiscordError>,
+) -> Result<()> {
+    let response = r#"**Claude Code Gateway Bot**
 
 このボットはDiscordを通じてClaude AIにアクセスするためのゲートウェイです。
 
@@ -33,5 +30,9 @@ pub async fn run(_interaction: &CommandInteraction) -> String {
 **注意事項:**
 - 管理者のみ使用可能です（設定で制御）
 - メッセージは2000文字で制限されます
-"#.to_string()
+"#;
+
+    ctx.say(response).await?;
+
+    Ok(())
 }

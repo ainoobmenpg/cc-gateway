@@ -1,5 +1,6 @@
 //! エラー型定義 (cc-discord)
 
+use poise::serenity_prelude as serenity;
 use thiserror::Error;
 
 /// cc-discord のエラー型
@@ -18,7 +19,14 @@ pub enum DiscordError {
     Config(String),
 
     #[error("Serenity error: {0}")]
-    SerenityError(#[from] serenity::Error),
+    SerenityError(Box<serenity::Error>),
+}
+
+// Manual From implementation to box the error
+impl From<serenity::Error> for DiscordError {
+    fn from(error: serenity::Error) -> Self {
+        DiscordError::SerenityError(Box::new(error))
+    }
 }
 
 /// Result 型エイリアス

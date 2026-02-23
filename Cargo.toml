@@ -31,6 +31,7 @@ http = "1"
 
 # Discord
 serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
+poise = "0.6"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

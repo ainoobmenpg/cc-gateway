@@ -16,6 +16,7 @@ cc-core.workspace = true
 
 # Discord
 serenity.workspace = true
+poise.workspace = true
 
 # Serialization
 serde.workspace = true
