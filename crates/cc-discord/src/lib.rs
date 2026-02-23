@@ -5,8 +5,10 @@
 
 pub mod bot;
 pub mod commands;
+pub mod error;
 pub mod handler;
 pub mod session;
 
 pub use bot::DiscordBot;
+pub use error::{DiscordError, Result};
 pub use session::InMemorySessionStore;

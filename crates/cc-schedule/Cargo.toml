@@ -10,6 +10,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
 cron = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
 toml = "0.8"

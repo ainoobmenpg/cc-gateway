@@ -2,22 +2,24 @@
 //!
 //! Starts and manages the axum-based HTTP server.
 
+use crate::error::Result;
 use axum::Router;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 
-use cc_core::{ClaudeClient, Config, SessionManager};
+use cc_core::{ClaudeClient, Config, SessionManager, ToolManager};
 
 use crate::routes::routes;
 
-/// Shared application state
+/// 共有アプリケーション状態
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
     pub claude_client: Arc<ClaudeClient>,
     pub session_manager: Arc<SessionManager>,
+    pub tool_manager: Arc<ToolManager>,
 }
 
 /// Start the HTTP API server
@@ -26,11 +28,13 @@ pub async fn start_server(
     config: Config,
     claude_client: ClaudeClient,
     session_manager: SessionManager,
-) -> anyhow::Result<()> {
+    tool_manager: Arc<ToolManager>,
+) -> Result<()> {
     let state = AppState {
         config,
         claude_client: Arc::new(claude_client),
         session_manager: Arc::new(session_manager),
+        tool_manager,
     };
 
     let app = Router::new()

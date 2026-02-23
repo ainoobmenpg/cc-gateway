@@ -1,14 +1,16 @@
 //! CLI (Command Line Interface) mode
 //!
 //! Provides an interactive REPL for OpenClaw-like experience.
+//! Also supports non-interactive execute mode for one-shot execution.
 
-use cc_core::{ClaudeClient, MessageContent, ToolManager, ToolResult};
+use cc_core::{ClaudeClient, Message, MessageContent, ToolManager, ToolResult};
 use cc_core::llm::{MessagesRequest, ToolDefinition};
 use cc_tools::register_default_tools;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
 use rustyline::{CompletionType, Config, EditMode, Editor};
 use serde_json::Value as JsonValue;
+use std::path::Path;
 use tracing::info;
 
 /// Available commands for autocomplete display
@@ -342,4 +344,98 @@ fn print_history(messages: &[cc_core::Message]) {
 
     println!("{}", "─".repeat(50));
     println!();
+}
+
+/// ============================================================================
+/// 非対話モード (Non-interactive mode)
+/// ============================================================================
+
+/// システムプロンプト（非対話モード用）
+const SYSTEM_PROMPT: &str = "あなたはツールにアクセスできる便利な AI アシスタントです。\
+    ユーザーと同じ言語で応答してください。\
+    必要に応じてツールを使用してユーザーを支援してください。";
+
+/// 最大反復回数（非対話モード用）
+const MAX_ITERATIONS: usize = 10;
+
+/// 非対話モード: プロンプトを直接実行して終了
+///
+/// # 使用例
+/// ```bash
+/// cc-gateway --execute "今日の天気は？"
+/// cc-gateway -e "2 + 2 を計算して"
+/// ```
+pub async fn run_execute(client: ClaudeClient, prompt: &str) -> anyhow::Result<()> {
+    // プロンプトが空の場合はエラー
+    let prompt = prompt.trim();
+    if prompt.is_empty() {
+        eprintln!("エラー: プロンプトが空です");
+        std::process::exit(1);
+    }
+
+    // ツールマネージャーを初期化
+    let mut tool_manager = ToolManager::new();
+    register_default_tools(&mut tool_manager);
+
+    info!("Starting execute mode with {} tools", tool_manager.len());
+
+    // メッセージを構築
+    let mut messages: Vec<Message> = vec![Message::user(prompt)];
+
+    // Agent turn を実行
+    match run_agent_turn(
+        &client,
+        &mut messages,
+        SYSTEM_PROMPT,
+        &tool_manager,
+        MAX_ITERATIONS,
+    )
+    .await
+    {
+        Ok(response) => {
+            // レスポンスを出力
+            println!("{}", response);
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("エラー: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// 非対話モード: ファイルからプロンプトを読み込んで実行
+///
+/// # 使用例
+/// ```bash
+/// cc-gateway --file prompt.txt
+/// cc-gateway -f ./queries/hello.txt
+/// ```
+pub async fn run_file(client: ClaudeClient, path: &Path) -> anyhow::Result<()> {
+    // ファイルの存在チェック
+    if !path.exists() {
+        eprintln!("エラー: ファイルが存在しません: {}", path.display());
+        std::process::exit(1);
+    }
+
+    // ファイルからプロンプトを読み込み
+    let prompt = tokio::fs::read_to_string(path).await;
+    let prompt = match prompt {
+        Ok(content) => content,
+        Err(e) => {
+            eprintln!("エラー: ファイルの読み込みに失敗しました: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let prompt = prompt.trim();
+    if prompt.is_empty() {
+        eprintln!("エラー: ファイルの内容が空です: {}", path.display());
+        std::process::exit(1);
+    }
+
+    info!("Executing prompt from file: {}", path.display());
+
+    // execute モードと同じ処理を実行
+    run_execute(client, prompt).await
 }

@@ -2,6 +2,7 @@
 //!
 //! TOML 形式の設定ファイルからスケジュールを読み込みます。
 
+use crate::error::{Result, ScheduleError};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -43,14 +44,15 @@ fn default_enabled() -> bool {
 
 impl ScheduleConfig {
     /// TOML ファイルから設定を読み込む
-    pub fn from_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
-        let content = std::fs::read_to_string(path.as_ref())?;
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let content = std::fs::read_to_string(path.as_ref())
+            .map_err(|e| ScheduleError::ConfigLoad(format!("ファイル読み込みエラー: {}", e)))?;
         let config: ScheduleConfig = toml::from_str(&content)?;
         Ok(config)
     }
 
     /// デフォルトパスから設定を読み込む
-    pub fn load_default() -> anyhow::Result<Self> {
+    pub fn load_default() -> Result<Self> {
         let paths = ["schedule.toml", "config/schedule.toml", ".cc-gateway/schedule.toml"];
 
         for path in &paths {

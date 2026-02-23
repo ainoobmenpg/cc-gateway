@@ -178,6 +178,36 @@ impl SessionManager {
         debug!("Loading active sessions not implemented yet");
         Ok(())
     }
+
+    /// Get all cached sessions (for API listing)
+    pub async fn list_cached_sessions(&self) -> Vec<Session> {
+        let cache = self.cache.read().await;
+        cache.values().cloned().collect()
+    }
+
+    /// Get a cached session by ID
+    pub async fn get_cached_session(&self, id: &str) -> Option<Session> {
+        let cache = self.cache.read().await;
+        cache.values().find(|s| s.id == id).cloned()
+    }
+
+    /// Remove a session from cache by session ID
+    pub async fn remove_from_cache(&self, session_id: &str) -> Option<String> {
+        let mut cache = self.cache.write().await;
+        let channel_id = cache.iter()
+            .find_map(|(k, v)| if v.id == session_id { Some(k.clone()) } else { None });
+        if let Some(ref ch_id) = channel_id {
+            cache.remove(ch_id);
+        }
+        channel_id
+    }
+
+    /// Invalidate cache for a channel
+    pub async fn invalidate_cache(&self, channel_id: &str) {
+        let mut cache = self.cache.write().await;
+        cache.remove(channel_id);
+        debug!("Invalidated cache for channel: {}", channel_id);
+    }
 }
 
 #[cfg(test)]

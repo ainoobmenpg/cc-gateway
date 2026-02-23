@@ -4,7 +4,7 @@ mod ask;
 mod clear;
 mod help;
 
-use anyhow::Result;
+use crate::error::Result;
 use serenity::all::{
     Command, CommandInteraction, Context, CreateCommand,
     CreateInteractionResponse, CreateInteractionResponseMessage,

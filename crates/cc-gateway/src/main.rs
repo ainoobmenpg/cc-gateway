@@ -22,6 +22,10 @@ enum RunMode {
     Server,
     /// Interactive CLI mode
     Cli,
+    /// Execute single prompt and exit (非対話モード: ワンショット実行)
+    Execute(String),
+    /// Execute from file and exit (非対話モード: ファイルから実行)
+    File(std::path::PathBuf),
     /// Show help
     Help,
     /// Show version
@@ -56,8 +60,9 @@ async fn main() -> anyhow::Result<()> {
     // Load .env file
     dotenvy::dotenv().ok();
 
-    // Load configuration from environment
-    let config = Config::from_env()
+    // Load configuration (TOML file + environment variables)
+    // 環境変数は TOML 設定を上書きします
+    let config = Config::load()
         .map_err(|e| anyhow::anyhow!("Config error: {}", e))?;
 
     tracing::info!("Starting cc-gateway...");
@@ -73,6 +78,16 @@ async fn main() -> anyhow::Result<()> {
             tracing::info!("Running in CLI mode");
             cli::run_cli(claude_client).await
         }
+        RunMode::Execute(prompt) => {
+            // 非対話モード: ワンショット実行
+            tracing::info!("Running in execute mode");
+            cli::run_execute(claude_client, &prompt).await
+        }
+        RunMode::File(path) => {
+            // 非対話モード: ファイルから実行
+            tracing::info!("Running in file mode: {:?}", path);
+            cli::run_file(claude_client, &path).await
+        }
         RunMode::Server => {
             // Server mode
             run_server(config, claude_client).await
@@ -84,14 +99,34 @@ async fn main() -> anyhow::Result<()> {
 /// Parse command line arguments
 fn parse_args() -> RunMode {
     let args: Vec<String> = std::env::args().collect();
+    let mut i = 1;
 
-    for arg in args.iter().skip(1) {
-        match arg.as_str() {
+    while i < args.len() {
+        match args[i].as_str() {
             "--cli" | "-c" => return RunMode::Cli,
             "--help" | "-h" => return RunMode::Help,
             "--version" | "-v" => return RunMode::Version,
+            "--execute" | "-e" => {
+                if i + 1 < args.len() {
+                    let prompt = args[i + 1].clone();
+                    return RunMode::Execute(prompt);
+                } else {
+                    eprintln!("エラー: --execute には引数が必要です");
+                    std::process::exit(1);
+                }
+            }
+            "--file" | "-f" => {
+                if i + 1 < args.len() {
+                    let path = std::path::PathBuf::from(&args[i + 1]);
+                    return RunMode::File(path);
+                } else {
+                    eprintln!("エラー: --file には引数が必要です");
+                    std::process::exit(1);
+                }
+            }
             _ => {}
         }
+        i += 1;
     }
 
     RunMode::Server
@@ -102,22 +137,37 @@ fn print_help() {
     println!("cc-gateway - Claude Code Gateway");
     println!();
     println!("Usage:");
-    println!("  cc-gateway           Start server mode (HTTP API + Discord Bot + Scheduler)");
-    println!("  cc-gateway --cli     Start interactive CLI mode");
-    println!("  cc-gateway --help    Show this help message");
-    println!("  cc-gateway --version Show version");
+    println!("  cc-gateway              Start server mode (HTTP API + Discord Bot + Scheduler)");
+    println!("  cc-gateway --cli        Start interactive CLI mode");
+    println!("  cc-gateway --execute PROMPT");
+    println!("                          Execute single prompt and exit (非対話モード)");
+    println!("  cc-gateway --file PATH  Execute prompt from file and exit (非対話モード)");
+    println!("  cc-gateway --help       Show this help message");
+    println!("  cc-gateway --version    Show version");
     println!();
-    println!("Environment Variables:");
-    println!("  LLM_API_KEY          API key (required)");
-    println!("  LLM_MODEL            Model name (default: claude-sonnet-4-20250514)");
-    println!("  LLM_PROVIDER         Provider: claude or openai (default: claude)");
-    println!("  LLM_BASE_URL         Custom API endpoint");
-    println!("  DISCORD_BOT_TOKEN    Discord bot token (optional)");
-    println!("  API_PORT             HTTP API port (default: 3000)");
-    println!("  MCP_ENABLED          Enable MCP integration (default: true)");
-    println!("  MCP_CONFIG_PATH      Path to MCP config file");
-    println!("  SCHEDULE_ENABLED     Enable scheduler (default: true)");
-    println!("  SCHEDULE_CONFIG_PATH Path to schedule.toml (default: schedule.toml)");
+    println!("Configuration:");
+    println!("  設定は以下の優先順位で読み込まれます:");
+    println!("    1. 環境変数");
+    println!("    2. cc-gateway.toml 設定ファイル");
+    println!("    3. デフォルト値");
+    println!();
+    println!("Environment Variables (環境変数は TOML 設定を上書きします):");
+    println!("  LLM_API_KEY             API key (required)");
+    println!("  LLM_MODEL               Model name (default: claude-sonnet-4-20250514)");
+    println!("  LLM_PROVIDER            Provider: claude or openai (default: claude)");
+    println!("  LLM_BASE_URL            Custom API endpoint");
+    println!("  DISCORD_BOT_TOKEN       Discord bot token (optional)");
+    println!("  API_PORT                HTTP API port (default: 3000)");
+    println!("  MCP_ENABLED             Enable MCP integration (default: true)");
+    println!("  MCP_CONFIG_PATH         Path to MCP config file");
+    println!("  SCHEDULE_ENABLED        Enable scheduler (default: true)");
+    println!("  SCHEDULE_CONFIG_PATH    Path to schedule.toml (default: schedule.toml)");
+    println!();
+    println!("Examples:");
+    println!("  cc-gateway --execute \"今日の天気は？\"");
+    println!("  cc-gateway -e \"2 + 2 を計算して\"");
+    println!("  cc-gateway --file prompt.txt");
+    println!("  cc-gateway -f ./queries/hello.txt");
 }
 
 /// Run server mode (HTTP API + Discord Bot + Scheduler)
@@ -166,9 +216,7 @@ async fn run_server(config: Config, claude_client: ClaudeClient) -> anyhow::Resu
     let mut scheduler_handle = None;
 
     // Start Scheduler if enabled
-    let schedule_enabled = std::env::var("SCHEDULE_ENABLED")
-        .map(|v| v != "false")
-        .unwrap_or(true);
+    let schedule_enabled = config.scheduler.enabled;
 
     if schedule_enabled {
         let schedule_config = load_schedule_config();
@@ -210,9 +258,16 @@ async fn run_server(config: Config, claude_client: ClaudeClient) -> anyhow::Resu
     let api_port = config.api.port;
     let api_config = config.clone();
     let api_client = Arc::clone(&claude_client);
+    let api_tool_manager = Arc::clone(&tool_manager);
 
     let handle = tokio::spawn(async move {
-        if let Err(e) = cc_api::start_server(api_port, api_config, (*api_client).clone(), session_manager).await {
+        if let Err(e) = cc_api::start_server(
+            api_port,
+            api_config,
+            (*api_client).clone(),
+            session_manager,
+            api_tool_manager,
+        ).await {
             tracing::error!("HTTP API error: {}", e);
         }
     });
@@ -268,6 +323,7 @@ async fn start_discord_bot(config: Config, claude_client: Arc<ClaudeClient>) -> 
 
     let bot = DiscordBot::with_client(config, claude_client);
     bot.start().await
+        .map_err(|e| anyhow::anyhow!("Discord bot error: {}", e))
 }
 
 /// Initialize MCP tools from configuration

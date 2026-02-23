@@ -85,3 +85,99 @@ impl Default for WriteTool {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_write_file() {
+        let tool = WriteTool::new();
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+
+        let input = json!({
+            "path": file_path.to_str().unwrap(),
+            "content": "Hello, World!"
+        });
+        let result = tool.execute(input).await.unwrap();
+
+        assert!(!result.is_error);
+        assert!(result.output.contains("Successfully wrote"));
+
+        // ファイルが正しく書き込まれたか確認
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "Hello, World!");
+    }
+
+    #[tokio::test]
+    async fn test_write_creates_directories() {
+        let tool = WriteTool::new();
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("nested/dir/test.txt");
+
+        let input = json!({
+            "path": file_path.to_str().unwrap(),
+            "content": "Nested content"
+        });
+        let result = tool.execute(input).await.unwrap();
+
+        assert!(!result.is_error);
+
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "Nested content");
+    }
+
+    #[tokio::test]
+    async fn test_write_overwrite() {
+        let tool = WriteTool::new();
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+
+        // 最初に書き込み
+        {
+            let input = json!({
+                "path": file_path.to_str().unwrap(),
+                "content": "Original content"
+            });
+            tool.execute(input).await.unwrap();
+        }
+
+        // 上書き
+        let input = json!({
+            "path": file_path.to_str().unwrap(),
+            "content": "New content"
+        });
+        let result = tool.execute(input).await.unwrap();
+
+        assert!(!result.is_error);
+
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "New content");
+    }
+
+    #[tokio::test]
+    async fn test_write_missing_path() {
+        let tool = WriteTool::new();
+
+        let input = json!({"content": "Hello"});
+        let result = tool.execute(input).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_write_missing_content() {
+        let tool = WriteTool::new();
+        let temp_dir = TempDir::new().unwrap();
+
+        let input = json!({
+            "path": temp_dir.path().join("test.txt").to_str().unwrap()
+        });
+        let result = tool.execute(input).await;
+
+        assert!(result.is_err());
+    }
+}

@@ -88,3 +88,94 @@ impl Default for ReadTool {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[tokio::test]
+    async fn test_read_file() {
+        let tool = ReadTool::new();
+
+        // 一時ファイルを作成
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "Hello, World!").unwrap();
+        writeln!(temp_file, "Line 2").unwrap();
+        writeln!(temp_file, "Line 3").unwrap();
+
+        let input = json!({"path": temp_file.path().to_str().unwrap()});
+        let result = tool.execute(input).await.unwrap();
+
+        assert!(!result.is_error);
+        assert!(result.output.contains("Hello, World!"));
+        assert!(result.output.contains("Line 2"));
+        assert!(result.output.contains("Line 3"));
+    }
+
+    #[tokio::test]
+    async fn test_read_with_offset() {
+        let tool = ReadTool::new();
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "Line 1").unwrap();
+        writeln!(temp_file, "Line 2").unwrap();
+        writeln!(temp_file, "Line 3").unwrap();
+
+        // 2行目から読み取り (offset=2 は2行目から)
+        let input = json!({
+            "path": temp_file.path().to_str().unwrap(),
+            "offset": 2
+        });
+        let result = tool.execute(input).await.unwrap();
+
+        assert!(!result.is_error);
+        assert!(!result.output.contains("Line 1"));
+        assert!(result.output.contains("Line 2"));
+        assert!(result.output.contains("Line 3"));
+    }
+
+    #[tokio::test]
+    async fn test_read_with_limit() {
+        let tool = ReadTool::new();
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "Line 1").unwrap();
+        writeln!(temp_file, "Line 2").unwrap();
+        writeln!(temp_file, "Line 3").unwrap();
+
+        // 最初の2行のみ読み取り
+        let input = json!({
+            "path": temp_file.path().to_str().unwrap(),
+            "limit": 2
+        });
+        let result = tool.execute(input).await.unwrap();
+
+        assert!(!result.is_error);
+        assert!(result.output.contains("Line 1"));
+        assert!(result.output.contains("Line 2"));
+        assert!(!result.output.contains("Line 3"));
+    }
+
+    #[tokio::test]
+    async fn test_read_nonexistent_file() {
+        let tool = ReadTool::new();
+
+        let input = json!({"path": "/nonexistent/file/path.txt"});
+        let result = tool.execute(input).await.unwrap();
+
+        assert!(result.is_error);
+        assert!(result.output.contains("Failed to read file"));
+    }
+
+    #[tokio::test]
+    async fn test_read_missing_path() {
+        let tool = ReadTool::new();
+
+        let input = json!({});
+        let result = tool.execute(input).await;
+
+        assert!(result.is_err());
+    }
+}

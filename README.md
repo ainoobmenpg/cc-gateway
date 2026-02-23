@@ -77,7 +77,47 @@ curl -X POST http://localhost:3000/api/chat \
 
 ## 設定
 
-`.env` ファイルを作成：
+設定は以下の優先順位で読み込まれます:
+1. 環境変数
+2. `cc-gateway.toml` 設定ファイル
+3. デフォルト値
+
+### TOML 設定ファイル（推奨）
+
+`cc-gateway.toml.example` をコピーして使用してください：
+
+```bash
+cp cc-gateway.toml.example cc-gateway.toml
+```
+
+設定ファイル内の `${VAR_NAME}` は環境変数の値に置換されます。
+
+```toml
+[llm]
+provider = "openai"
+model = "glm-4.7"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+api_key = "${LLM_API_KEY}"
+
+[discord]
+token = "${DISCORD_BOT_TOKEN}"
+admin_user_ids = [123456789]
+
+[api]
+port = 3000
+
+[scheduler]
+enabled = true
+config_path = "schedule.toml"
+
+[mcp]
+enabled = true
+config_path = "mcp.json"
+```
+
+### 環境変数設定（.env ファイル）
+
+`.env` ファイルを作成（TOML 設定ファイル内の値を上書きします）：
 
 ```bash
 # LLM 設定（必須）

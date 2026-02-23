@@ -3,6 +3,7 @@
 //! cron スケジュールに基づいてタスクを実行します。
 
 use crate::config::{ScheduleConfig, ScheduleTask};
+use crate::error::Result;
 use cc_core::{ClaudeClient, ToolManager};
 use chrono::{DateTime, Utc};
 use cron::Schedule as CronSchedule;
@@ -179,7 +180,7 @@ async fn execute_task(
     client: &ClaudeClient,
     tool_manager: &ToolManager,
     system_prompt: &str,
-) -> anyhow::Result<String> {
+) -> Result<String> {
     use cc_core::llm::MessagesRequest;
 
     // ユーザーメッセージを作成
@@ -225,7 +226,7 @@ async fn execute_task(
 }
 
 /// cron 文字列をパース
-fn parse_cron(cron_expr: &str) -> anyhow::Result<CronSchedule> {
+fn parse_cron(cron_expr: &str) -> Result<CronSchedule> {
     // cron 形式: "分 時 日 月 曜日"
     // 例: "0 9 * * *" = 毎日 9:00
     let schedule = cron_expr.parse::<CronSchedule>()?;

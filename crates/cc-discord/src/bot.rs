@@ -1,6 +1,6 @@
 //! Discord Bot implementation using Serenity
 
-use anyhow::Result;
+use crate::error::{DiscordError, Result};
 use serenity::model::gateway::GatewayIntents;
 use serenity::prelude::*;
 use std::sync::Arc;
@@ -19,17 +19,8 @@ pub struct DiscordBot {
 }
 
 impl DiscordBot {
-    /// Create a new Discord Bot instance
-    pub fn new(config: Config) -> Result<Self> {
-        let claude_client = ClaudeClient::new(&config)?;
-        let session_store = Arc::new(InMemorySessionStore::new());
-
-        // Start session cleanup task
-        let store_clone = session_store.clone();
-        tokio::spawn(async move {
-            store_clone.start_cleanup_task().await.unwrap();
-        });
-
+    /// Create a new Discord bot
+    pub fn new(config: Config, claude_client: ClaudeClient, session_store: Arc<InMemorySessionStore>) -> Result<Self> {
         Ok(Self {
             config,
             claude_client: Arc::new(claude_client),
@@ -61,9 +52,8 @@ impl DiscordBot {
 
     /// Start the Discord bot
     pub async fn start(&self) -> Result<()> {
-        let token = self.config.discord_token.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("DISCORD_BOT_TOKEN not set in configuration")
-        })?;
+        let token = self.config.discord_token.as_ref()
+            .ok_or(DiscordError::TokenNotSet)?;
 
         // Set up gateway intents
         // - GUILD_MESSAGES: Receive messages in guild channels
