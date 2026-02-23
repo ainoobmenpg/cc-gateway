@@ -18,6 +18,7 @@ tokio.workspace = true
 cc-core.workspace = true
 cc-tools.workspace = true
 cc-mcp.workspace = true
+cc-schedule.workspace = true
 cc-discord.workspace = true
 cc-api.workspace = true
 

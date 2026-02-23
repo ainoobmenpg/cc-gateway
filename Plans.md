@@ -2,7 +2,7 @@
 
 > Pure Rust Claude Gateway - OpenClaw代替実装
 >
-> 作成日: 2026-02-23 | 最終更新: 2026-02-23
+> 作成日: 2026-02-23 | 最終更新: 2026-02-24
 
 ---
 
@@ -17,6 +17,7 @@
 | Phase 5: HTTP API | ✅ 完了 | 100% |
 | Phase 6: Main Binary | ✅ 完了 | 100% |
 | Phase 7: CLI対話モード | ✅ 完了 | 100% |
+| Phase 8: スケジューラー | ✅ 完了 | 100% |
 
 **🎉 全Phase完了！**
 
@@ -108,6 +109,26 @@
 
 ---
 
+## Phase 8: スケジューラー [✅ 完了]
+
+### 8.1 スケジュール Crate [✅] 完了
+
+- [x] `crates/cc-schedule/` 作成
+- [x] `config.rs` - TOML 設定読み込み
+- [x] `scheduler.rs` - cron ベースのタスク実行
+
+### 8.2 設定ファイル [✅] 完了
+
+- [x] `schedule.toml` 形式定義
+- [x] `schedule.toml.example` サンプル作成
+
+### 8.3 main.rs 統合 [✅] 完了
+
+- [x] スケジューラー初期化
+- [x] グレースフルシャットダウン
+
+---
+
 ## 🎯 優先度マトリックス (Phase 7) - 完了
 
 | 優先度 | タスク | 状態 |
@@ -146,6 +167,10 @@ DB_PATH=data/cc-gateway.db
 # MCP統合
 MCP_CONFIG_PATH=mcp.json
 MCP_ENABLED=true
+
+# スケジューラー (オプション)
+SCHEDULE_ENABLED=true
+SCHEDULE_CONFIG_PATH=schedule.toml
 ```
 
 ## 🚀 使用方法
@@ -154,12 +179,36 @@ MCP_ENABLED=true
 # CLI対話モード (OpenClaw風)
 cargo run -- --cli
 
-# サーバーモード (HTTP API + Discord Bot)
+# サーバーモード (HTTP API + Discord Bot + スケジューラー)
 cargo run
 
 # ヘルプ
 cargo run -- --help
 ```
+
+## 📅 スケジュール設定
+
+`schedule.toml` で定期実行タスクを設定：
+
+```toml
+# 毎朝の挨拶
+[[schedules]]
+name = "毎朝の挨拶"
+cron = "0 9 * * *"        # 毎日 9:00
+prompt = "おはようございます。今日の予定を教えてください。"
+enabled = true
+
+# 日次レポート
+[[schedules]]
+name = "日次レポート"
+cron = "0 18 * * *"       # 毎日 18:00
+prompt = "今日の作業ログをまとめてください。"
+tools = ["read", "glob"]  # 使用ツールを制限
+discord_channel = "reports"  # Discord に投稿
+enabled = true
+```
+
+cron 形式: `分 時 日 月 曜日`
 
 ---
 

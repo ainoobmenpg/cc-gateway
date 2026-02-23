@@ -12,6 +12,7 @@ Claude API と OpenAI 互換 API（GLM Coding Plan など）に対応した高�
 - **Discord Bot**: スラッシュコマンド対応のフル機能 Discord 連携
 - **MCP 統合**: Model Context Protocol による外部ツール対応
 - **組み込みツール**: bash, read, write, edit, glob, grep
+- **スケジューラー**: cron 形式でタスクを定期実行
 
 ## インストール
 
@@ -134,6 +135,35 @@ cc-gateway (workspace)
   ]
 }
 ```
+
+## スケジューラー
+
+`schedule.toml` で定期実行タスクを設定：
+
+```toml
+# 毎朝の挨拶
+[[schedules]]
+name = "毎朝の挨拶"
+cron = "0 9 * * *"        # 毎日 9:00
+prompt = "おはようございます。今日の予定を教えてください。"
+enabled = true
+
+# 日次レポート
+[[schedules]]
+name = "日次レポート"
+cron = "0 18 * * *"       # 毎日 18:00
+prompt = "今日の作業ログをまとめてください。"
+tools = ["read", "glob"]  # 使用ツールを制限（オプション）
+discord_channel = "reports"  # Discord に投稿（オプション）
+enabled = true
+```
+
+cron 形式: `分 時 日 月 曜日`
+
+| 環境変数 | 説明 | デフォルト |
+|---------|------|----------|
+| `SCHEDULE_ENABLED` | スケジューラー有効/無効 | `true` |
+| `SCHEDULE_CONFIG_PATH` | 設定ファイルパス | `schedule.toml` |
 
 ## 開発
 

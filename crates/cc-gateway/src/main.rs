@@ -3,7 +3,7 @@
 //! Main entry point for the Claude Code Gateway application.
 //!
 //! Usage:
-//!   cc-gateway           - Start server mode (HTTP API + Discord Bot)
+//!   cc-gateway           - Start server mode (HTTP API + Discord Bot + Scheduler)
 //!   cc-gateway --cli     - Start interactive CLI mode
 //!   cc-gateway --help    - Show help
 
@@ -11,6 +11,7 @@ mod cli;
 
 use cc_core::{ClaudeClient, Config, SessionManager, ToolManager};
 use cc_mcp::McpRegistry;
+use cc_schedule::{Scheduler, ScheduleConfig};
 use cc_tools::register_default_tools;
 use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
@@ -101,7 +102,7 @@ fn print_help() {
     println!("cc-gateway - Claude Code Gateway");
     println!();
     println!("Usage:");
-    println!("  cc-gateway           Start server mode (HTTP API + Discord Bot)");
+    println!("  cc-gateway           Start server mode (HTTP API + Discord Bot + Scheduler)");
     println!("  cc-gateway --cli     Start interactive CLI mode");
     println!("  cc-gateway --help    Show this help message");
     println!("  cc-gateway --version Show version");
@@ -115,9 +116,11 @@ fn print_help() {
     println!("  API_PORT             HTTP API port (default: 3000)");
     println!("  MCP_ENABLED          Enable MCP integration (default: true)");
     println!("  MCP_CONFIG_PATH      Path to MCP config file");
+    println!("  SCHEDULE_ENABLED     Enable scheduler (default: true)");
+    println!("  SCHEDULE_CONFIG_PATH Path to schedule.toml (default: schedule.toml)");
 }
 
-/// Run server mode (HTTP API + Discord Bot)
+/// Run server mode (HTTP API + Discord Bot + Scheduler)
 async fn run_server(config: Config, claude_client: ClaudeClient) -> anyhow::Result<()> {
     let claude_client = Arc::new(claude_client);
 
@@ -151,12 +154,41 @@ async fn run_server(config: Config, claude_client: ClaudeClient) -> anyhow::Resu
         tool_manager.len()
     );
 
+    // Wrap tool_manager in Arc for sharing
+    let tool_manager = Arc::new(tool_manager);
+
     // Create session manager
     let session_manager = SessionManager::new(&config.memory.db_path)
         .map_err(|e| anyhow::anyhow!("Failed to create session manager: {}", e))?;
 
     // Track running services for graceful shutdown
     let mut service_handles = Vec::new();
+    let mut scheduler_handle = None;
+
+    // Start Scheduler if enabled
+    let schedule_enabled = std::env::var("SCHEDULE_ENABLED")
+        .map(|v| v != "false")
+        .unwrap_or(true);
+
+    if schedule_enabled {
+        let schedule_config = load_schedule_config();
+        let enabled_count = schedule_config.enabled_tasks().len();
+
+        if enabled_count > 0 {
+            let scheduler = Scheduler::new(
+                schedule_config,
+                (*claude_client).clone(),
+                Arc::clone(&tool_manager),
+            );
+            let handle = scheduler.start();
+            scheduler_handle = Some(handle);
+            tracing::info!("スケジューラーを開始しました ({} タスク)", enabled_count);
+        } else {
+            tracing::info!("スケジュールタスクがありません");
+        }
+    } else {
+        tracing::info!("スケジューラーは無効です");
+    }
 
     // Start Discord bot if token is configured
     if let Some(_token) = &config.discord_token {
@@ -194,6 +226,11 @@ async fn run_server(config: Config, claude_client: ClaudeClient) -> anyhow::Resu
     tokio::signal::ctrl_c().await?;
     tracing::info!("Shutting down...");
 
+    // Stop scheduler
+    if let Some(handle) = scheduler_handle {
+        handle.stop().await;
+    }
+
     // Abort all services
     for handle in service_handles {
         handle.abort();
@@ -208,6 +245,21 @@ async fn run_server(config: Config, claude_client: ClaudeClient) -> anyhow::Resu
 
     tracing::info!("Shutdown complete");
     Ok(())
+}
+
+/// Load schedule configuration
+fn load_schedule_config() -> ScheduleConfig {
+    // Check for custom config path
+    if let Ok(path) = std::env::var("SCHEDULE_CONFIG_PATH") {
+        tracing::info!("Loading schedule config from: {}", path);
+        match ScheduleConfig::from_file(&path) {
+            Ok(config) => return config,
+            Err(e) => tracing::warn!("Failed to load schedule config from {}: {}", path, e),
+        }
+    }
+
+    // Try default paths
+    ScheduleConfig::load_default().unwrap_or_default()
 }
 
 /// Start Discord bot

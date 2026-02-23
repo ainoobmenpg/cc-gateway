@@ -4,6 +4,7 @@ members = [
     "crates/cc-core",
     "crates/cc-tools",
     "crates/cc-mcp",
+    "crates/cc-schedule",
     "crates/cc-discord",
     "crates/cc-api",
     "crates/cc-gateway",  # main binary
@@ -70,5 +71,6 @@ dotenvy = "0.15"
 cc-core = { path = "crates/cc-core" }
 cc-tools = { path = "crates/cc-tools" }
 cc-mcp = { path = "crates/cc-mcp" }
+cc-schedule = { path = "crates/cc-schedule" }
 cc-discord = { path = "crates/cc-discord" }
 cc-api = { path = "crates/cc-api" }

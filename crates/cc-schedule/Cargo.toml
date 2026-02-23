@@ -1,0 +1,15 @@
+[package]
+name = "cc-schedule"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cc-core = { path = "../cc-core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+cron = "0.15"
+chrono = { version = "0.4", features = ["serde"] }
+toml = "0.8"

@@ -1,0 +1,39 @@
+# スケジュール設定ファイル
+#
+# cron 形式: "分 時 日 月 曜日"
+# 例:
+#   "0 9 * * *"    = 毎日 9:00
+#   "0 18 * * *"   = 毎日 18:00
+#   "30 12 * * 1-5" = 平日 12:30
+#   "0 0 * * 0"     = 毎週日曜 0:00
+
+# 毎朝の挨拶
+[[schedules]]
+name = "毎朝の挨拶"
+cron = "0 9 * * *"
+prompt = "おはようございます。今日の予定を教えてください。"
+enabled = true
+
+# 日次レポート
+[[schedules]]
+name = "日次レポート"
+cron = "0 18 * * *"
+prompt = "今日の作業ログをまとめて、サマリーを作成してください。"
+tools = ["read", "glob", "bash"]
+# discord_channel = "reports"  # Discord チャンネルに投稿（オプション）
+enabled = true
+
+# 週次バックアップ
+[[schedules]]
+name = "週次バックアップ"
+cron = "0 0 * * 0"
+prompt = "データのバックアップを実行してください。"
+tools = ["bash"]
+enabled = false  # 無効化する場合は false
+
+# リマインダー例
+[[schedules]]
+name = "会議リマインダー"
+cron = "30 13 * * 1"  # 毎週月曜 13:30
+prompt = "週次定例会議のリマインダーです。準備してください。"
+enabled = false
