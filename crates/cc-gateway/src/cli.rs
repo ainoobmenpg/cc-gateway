@@ -2,13 +2,23 @@
 //!
 //! Provides an interactive REPL for OpenClaw-like experience.
 
-use std::io::{self, Write};
-
 use cc_core::{ClaudeClient, MessageContent, ToolManager, ToolResult};
 use cc_core::llm::{MessagesRequest, ToolDefinition};
 use cc_tools::register_default_tools;
+use rustyline::error::ReadlineError;
+use rustyline::history::DefaultHistory;
+use rustyline::{CompletionType, Config, EditMode, Editor};
 use serde_json::Value as JsonValue;
 use tracing::info;
+
+/// Available commands for autocomplete display
+const COMMANDS: &[(&str, &str)] = &[
+    ("/help", "ヘルプを表示"),
+    ("/exit", "プログラムを終了"),
+    ("/quit", "プログラムを終了"),
+    ("/clear", "会話履歴をクリア"),
+    ("/history", "会話履歴を表示"),
+];
 
 /// CLI configuration
 pub struct CliConfig {
@@ -45,57 +55,102 @@ pub async fn run_cli_with_config(client: ClaudeClient, cli_config: CliConfig) ->
     // Welcome message
     print_welcome();
 
+    // Setup rustyline with basic config
+    let config = Config::builder()
+        .history_ignore_space(true)
+        .completion_type(CompletionType::List)
+        .edit_mode(EditMode::Emacs)
+        .build();
+
+    let mut rl: Editor<(), DefaultHistory> = Editor::with_config(config)?;
+
     // Conversation history
     let mut messages: Vec<cc_core::Message> = Vec::new();
 
     loop {
-        // Read user input
-        print!("> ");
-        io::stdout().flush()?;
+        // Read user input with readline (colored prompt)
+        let readline = rl.readline("\x1b[1;36m> \x1b[0m");
 
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        let input = input.trim();
+        match readline {
+            Ok(line) => {
+                let input = line.trim();
 
-        // Handle empty input
-        if input.is_empty() {
-            continue;
-        }
+                // Handle empty input
+                if input.is_empty() {
+                    continue;
+                }
 
-        // Handle special commands
-        if handle_command(input, &messages) {
-            continue;
-        }
+                // Check for partial command match and show suggestions
+                if input.starts_with('/') && !COMMANDS.iter().any(|(cmd, _)| *cmd == input.to_lowercase().as_str()) {
+                    // Show matching commands
+                    let matches: Vec<_> = COMMANDS
+                        .iter()
+                        .filter(|(cmd, _)| cmd.starts_with(&input.to_lowercase()))
+                        .collect();
 
-        // Add user message to history
-        messages.push(cc_core::Message::user(input));
+                    if !matches.is_empty() {
+                        println!("\n💡 コマンド候補:");
+                        for (cmd, desc) in matches {
+                            println!("  {} - {}", cmd, desc);
+                        }
+                        println!();
+                        continue;
+                    }
+                }
 
-        // Run agent loop
-        match run_agent_turn(
-            &client,
-            &mut messages,
-            &cli_config.system_prompt,
-            &tool_manager,
-            cli_config.max_iterations,
-        )
-        .await
-        {
-            Ok(response) => {
-                // Print response
-                println!("\n{}\n", response);
+                // Add to history
+                let _ = rl.add_history_entry(input.to_string());
 
-                // Add assistant response to history
-                messages.push(cc_core::Message::assistant(&response));
+                // Handle special commands
+                if handle_command(input, &mut messages) {
+                    continue;
+                }
+
+                // Add user message to history
+                messages.push(cc_core::Message::user(input));
+
+                // Run agent loop
+                match run_agent_turn(
+                    &client,
+                    &mut messages,
+                    &cli_config.system_prompt,
+                    &tool_manager,
+                    cli_config.max_iterations,
+                )
+                .await
+                {
+                    Ok(response) => {
+                        // Print response
+                        println!("\n{}\n", response);
+
+                        // Add assistant response to history
+                        messages.push(cc_core::Message::assistant(&response));
+                    }
+                    Err(e) => {
+                        eprintln!("\n❌ エラー: {}\n", e);
+                    }
+                }
             }
-            Err(e) => {
-                eprintln!("\n❌ Error: {}\n", e);
+            Err(ReadlineError::Interrupted) => {
+                println!("\n^C");
+                continue;
+            }
+            Err(ReadlineError::Eof) => {
+                println!("\n👋 さようなら！\n");
+                break;
+            }
+            Err(err) => {
+                eprintln!("\n❌ エラー: {}\n", err);
+                break;
             }
         }
     }
+
+    Ok(())
 }
 
 /// Handle special commands (/, /exit, /clear, /help)
-fn handle_command(input: &str, messages: &[cc_core::Message]) -> bool {
+fn handle_command(input: &str, messages: &mut Vec<cc_core::Message>) -> bool {
     let lower = input.to_lowercase();
 
     match lower.as_str() {
@@ -104,7 +159,7 @@ fn handle_command(input: &str, messages: &[cc_core::Message]) -> bool {
             std::process::exit(0);
         }
         "/clear" => {
-            // Note: We can't clear messages from here since it's borrowed
+            messages.clear();
             println!("\n✅ 会話履歴をクリアしました。\n");
             true
         }
@@ -247,6 +302,7 @@ fn print_welcome() {
     println!("╠════════════════════════════════════════════════════════════╣");
     println!("║  メッセージを入力して Enter でチャット開始                  ║");
     println!("║  コマンド: /help, /exit, /clear, /history                  ║");
+    println!("║  入力中に候補が自動表示されます                             ║");
     println!("╚════════════════════════════════════════════════════════════╝");
     println!();
 }
@@ -255,10 +311,11 @@ fn print_welcome() {
 fn print_help() {
     println!();
     println!("📖 利用可能なコマンド:");
-    println!("  /help, /?     - ヘルプを表示");
-    println!("  /exit, /quit  - プログラムを終了");
-    println!("  /clear        - 会話履歴をクリア");
-    println!("  /history      - 会話履歴を表示");
+    for (cmd, desc) in COMMANDS {
+        println!("  {} - {}", cmd, desc);
+    }
+    println!();
+    println!("💡 ヒント: / から入力するとコマンド候補が表示されます");
     println!();
 }
 

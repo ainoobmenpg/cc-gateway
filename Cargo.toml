@@ -62,6 +62,7 @@ regex = "1"
 glob = "0.3"
 grep = "0.3"  # ripgrep library
 dashmap = "5.5"  # Concurrent map
+rustyline = "15"  # CLI readline with completion
 
 # Configuration
 config = "0.15"
