@@ -45,8 +45,8 @@ LLM（大規模言語モデル）プロバイダーの設定です。
 
 | 項目 | 型 | デフォルト値 | 説明 |
 |------|----|-------------|------|
-| `provider` | string | `"openai"` | API プロバイダー（`"claude"` または `"openai"`） |
-| `model` | string | `"glm-4.7"` | 使用するモデル名 |
+| `provider` | string | `"claude"` | API プロバイダー（`"claude"` または `"openai"`） |
+| `model` | string | `"claude-sonnet-4-20250514"` | 使用するモデル名 |
 | `api_key` | string | - | API キー（環境変数推奨） |
 | `base_url` | string | - | カスタム API エンドポイント |
 
@@ -71,6 +71,7 @@ HTTP API サーバーの設定です。
 |------|----|-------------|------|
 | `port` | int | `3000` | API サーバーのポート番号 |
 | `key` | string | - | API 認証キー（オプション） |
+| `allowed_origins` | array of string | `["*"]` | CORS 許可オリジン |
 
 ### メモリ設定 (`[memory]`)
 
@@ -112,14 +113,15 @@ Model Context Protocol（MCP）統合の設定です。
 
 | 環境変数 | 対応する設定項目 | デフォルト値 |
 |---------|----------------|-------------|
-| `LLM_PROVIDER` | `[llm].provider` | `"openai"` |
-| `LLM_MODEL` | `[llm].model` | `"glm-4.7"` |
+| `LLM_PROVIDER` | `[llm].provider` | `"claude"` |
+| `LLM_MODEL` | `[llm].model` | `"claude-sonnet-4-20250514"` |
 | `LLM_API_KEY` | `[llm].api_key` | - |
 | `LLM_BASE_URL` | `[llm].base_url` | - |
 | `DISCORD_BOT_TOKEN` | `[discord].token` | - |
 | `ADMIN_USER_IDS` | `[discord].admin_user_ids` | `[]` |
 | `API_PORT` | `[api].port` | `3000` |
 | `API_KEY` | `[api].key` | - |
+| `API_ALLOWED_ORIGINS` | `[api].allowed_origins` | `["*"]` |
 | `DB_PATH` | `[memory].db_path` | `"data/cc-gateway.db"` |
 | `MCP_ENABLED` | `[mcp].enabled` | `true` |
 | `MCP_CONFIG_PATH` | `[mcp].config_path` | `"mcp.json"` |
@@ -185,14 +187,13 @@ api_key = "${YOUR_API_KEY}"
 
 ## 設定ファイルのサンプル
 
-### 最小構成（GLM のみ）
+### 最小構成（Claude デフォルト）
 
 ```toml
 [llm]
-provider = "openai"
-model = "glm-4.7"
-base_url = "https://api.z.ai/api/coding/paas/v4"
-api_key = "${GLM_API_KEY}"
+provider = "claude"
+model = "claude-sonnet-4-20250514"
+api_key = "${ANTHROPIC_API_KEY}"
 ```
 
 ### 全機能有効化
@@ -210,6 +211,7 @@ admin_user_ids = [123456789, 987654321]
 [api]
 port = 3000
 key = "${API_KEY}"
+allowed_origins = ["*"]
 
 [memory]
 db_path = "data/cc-gateway.db"

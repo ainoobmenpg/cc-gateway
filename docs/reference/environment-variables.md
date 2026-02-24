@@ -14,13 +14,13 @@ cc-gateway で使用できる環境変数の一覧です。
 
 ```bash
 # 環境変数で設定（最優先）
-export LLM_MODEL=glm-4.7
+export LLM_MODEL=claude-sonnet-4-20250514
 ```
 
 ```toml
 # cc-gateway.toml で設定（環境変数がない場合に使用）
 [llm]
-model = "glm-4.7"
+model = "claude-sonnet-4-20250514"
 ```
 
 ---
@@ -40,7 +40,7 @@ export LLM_API_KEY=sk-ant-your-key-here
 ### LLM_MODEL
 
 - **説明**: 使用する LLM モデル名
-- **デフォルト値**: `glm-4.7`
+- **デフォルト値**: `claude-sonnet-4-20250514`
 - **必須**: -
 
 ```bash
@@ -59,7 +59,7 @@ export LLM_MODEL=gpt-4o-mini
 ### LLM_PROVIDER
 
 - **説明**: LLM プロバイダーの種類
-- **デフォルト値**: `openai`
+- **デフォルト値**: `claude`
 - **必須**: -
 - **選択可能な値**:
   - `openai` - OpenAI 互換 API（GLM、OpenAI など）
@@ -184,6 +184,16 @@ export API_PORT=8080
 export API_HOST=127.0.0.1  # ローカルホストのみ
 ```
 
+### API_ALLOWED_ORIGINS
+
+- **説明**: CORS 許可オリジンのリスト（カンマ区切り）
+- **デフォルト値**: `*`（すべて許可）
+- **必須**: -
+
+```bash
+export API_ALLOWED_ORIGINS=http://localhost:3000,https://example.com
+```
+
 ---
 
 ## MCP 設定
@@ -306,8 +316,8 @@ export RUST_BACKTRACE=full
 | 変数名 | 説明 | デフォルト値 | 必須 | 設定セクション |
 |--------|------|-------------|------|---------------|
 | LLM_API_KEY | API認証キー | - | ○ | LLM |
-| LLM_MODEL | モデル名 | glm-4.7 | - | LLM |
-| LLM_PROVIDER | プロバイダー | openai | - | LLM |
+| LLM_MODEL | モデル名 | claude-sonnet-4-20250514 | - | LLM |
+| LLM_PROVIDER | プロバイダー | claude | - | LLM |
 | LLM_BASE_URL | APIエンドポイント | （注1） | - | LLM |
 | DISCORD_BOT_TOKEN | Discord Botトークン | - | - | Discord |
 | ADMIN_USER_IDS | 管理者ユーザーID | - | - | Discord |
@@ -315,6 +325,7 @@ export RUST_BACKTRACE=full
 | API_KEY | HTTP API認証キー | - | - | API |
 | API_PORT | HTTP APIポート | 3000 | - | API |
 | API_HOST | HTTP APIホスト | 0.0.0.0 | - | API |
+| API_ALLOWED_ORIGINS | CORS許可オリジン | * | - | API |
 | MCP_ENABLED | MCP有効フラグ | true | - | MCP |
 | MCP_CONFIG_PATH | MCP設定ファイルパス | mcp.json | - | MCP |
 | SCHEDULE_ENABLED | スケジューラー有効フラグ | true | - | スケジューラー |
@@ -337,14 +348,14 @@ export RUST_BACKTRACE=full
 ```bash
 # .env
 LLM_API_KEY=your-api-key
-LLM_MODEL=glm-4.7
-LLM_PROVIDER=openai
-LLM_BASE_URL=https://api.z.ai/api/coding/paas/v4
+LLM_MODEL=claude-sonnet-4-20250514
+LLM_PROVIDER=claude
 
 DISCORD_BOT_TOKEN=your-bot-token
 ADMIN_USER_IDS=123456789,987654321
 
 API_PORT=3000
+API_ALLOWED_ORIGINS=*
 ```
 
 `.env` ファイルはプロジェクトルートディレクトリに配置すると自動的に読み込まれます。
