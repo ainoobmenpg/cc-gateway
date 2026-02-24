@@ -11,75 +11,30 @@
 | Phase | 状態 | 内容 |
 |-------|------|------|
 | Phase 1-21 | ✅ 完了 | コア機能 + セキュリティ/安定性/品質/Discord/MCP/マルチチャネル/自動化 |
+| Phase 22 | ✅ 完了 | Critical: WebSocket / 画像 / WebSearch / WebFetch / Skills |
+| Phase 23 | 🔴 未着手 | High: iMessage / Signal / Slack / Sub-Agents |
+| Phase 24 | 🔴 未着手 | Medium: 完全ブラウザ / Voice / Web Dashboard |
+| Phase 25 | 🔴 未着手 | Superior: Rust最適化 / バイナリ配布 |
 
 > 📦 過去の完了タスク: `.claude/memory/archive/Plans-2026-02-24.md`
+>
+> 📊 **OpenClaw パリティ達成率**: ~50% → 詳細は `OPENCLAW_COMPARISON.md`
 
 ---
 
 ## ✅ 完了フェーズ
 
-### Phase 20: マルチチャネル対応 [✅ 完了]
+> Phase 1-21 の詳細は `.claude/memory/archive/Plans-2026-02-24.md` を参照
 
-> OpenClaw パリティ: WhatsApp, Telegram
-
-#### Phase 20.1: Telegram Bot [✅ 完了]
-
-**技術スタック**: `teloxide` クレート
-
-- [x] 20.1.1: `cc-telegram` クレート作成
-- [x] 20.1.2: `teloxide` 依存関係追加
-- [x] 20.1.3: Telegram Bot 基本構造実装
-- [x] 20.1.4: `/ask`, `/clear`, `/help` コマンド実装
-- [x] 20.1.5: セッション管理統合
-- [x] 20.1.6: テスト追加
-
-#### Phase 20.2: WhatsApp Bot [✅ 完了]
-
-**技術スタック**: Twilio API (`reqwest`, `axum`)
-
-- [x] 20.2.1: `cc-whatsapp` クレート作成
-- [x] 20.2.2: Twilio Webhook サーバー実装
-- [x] 20.2.3: メッセージ送受信 API 実装
-- [x] 20.2.4: セッション管理統合
-- [x] 20.2.5: Webhook 署名検証（セキュリティ）
-- [x] 20.2.6: テスト追加
-
----
-
-### Phase 21: 自動化機能 [✅ 完了]
-
-> OpenClaw パリティ: ブラウザ自動化、メール
-
-#### Phase 21.1: ブラウザ自動化 [✅ 完了]
-
-**技術スタック**: Tool trait 実装（stub）
-
-- [x] 21.1.1: `cc-browser` クレート作成
-- [x] 21.1.2: ブラウザツール実装（Tool trait）
-  - `browser_navigate`: URL に移動
-  - `browser_click`: 要素をクリック
-  - `browser_type`: テキスト入力
-  - `browser_screenshot`: スクリーンショット
-  - `browser_extract`: テキスト抽出
-- [x] 21.1.3: ToolManager に登録
-- [x] 21.1.4: テスト追加
-
-> **Note**: 現在は stub 実装。実際のブラウザ操作には Chrome/Chromium が必要。
-
-#### Phase 21.2: メール送受信 [✅ 完了]
-
-**技術スタック**: `lettre` (SMTP)
-
-- [x] 21.2.1: `cc-email` クレート作成
-- [x] 21.2.2: SMTP 送信実装（stub）
-- [x] 21.2.3: IMAP 受信実装（stub）
-- [x] 21.2.4: メールツール実装（Tool trait）
-  - `email_send`: メール送信
-  - `email_list`: メール一覧取得
-  - `email_read`: メール読み込み
-- [x] 21.2.5: テスト追加
-
-> **Note**: 現在は stub 実装。`smtp` feature で完全実装が可能。
+| Phase | 内容 |
+|-------|------|
+| 1-8 | Core Library, Tools, MCP Client, Discord, HTTP API, CLI, Scheduler |
+| 9-13 | TOML設定, エラーハンドリング, CLI非対話, HTTP API拡張, テスト追加 |
+| 14-16 | セキュリティ, 安定性, 品質改善 |
+| 17-18 | (reserved) |
+| 19 | MCP統合 (McpRegistry) |
+| 20 | マルチチャネル (Telegram, WhatsApp) |
+| 21 | 自動化機能 (Browser, Email stubs) |
 
 ---
 
@@ -90,19 +45,74 @@
 - HTTP client: reqwest (rustls-tls)
 - SQLite: rusqlite (bundled)
 - Discord: poise 0.6
-- **Telegram: teloxide 0.13** ✅
-- **WhatsApp: Twilio API (axum webhook)** ✅
-- **Browser: Tool trait (stub)** ✅
-- **Email: lettre (stub)** ✅
+- Telegram: teloxide 0.13 ✅
+- WhatsApp: Twilio API (axum webhook) ✅
+- Browser/Email: stub ✅
+- **WebSocket: axum + tokio-tungstenite** ✅
+- **WebSearch/WebFetch: reqwest + scraper** ✅
+- **Skills: config + dynamic loader** ✅
 
 ---
 
-## 🚀 今後の拡張可能性
+## 🔴 Phase 22: Critical Features
+
+> **目標**: 基本的な機能パリティ達成、達成率 ~50%
+
+| タスク | 技術スタック | 内容 |
+|--------|------------|------|
+| 22.1 WebSocket | axum + tokio-tungstenite | cc-ws crate, WS server, セッション統合, 簡易Web UI |
+| 22.2 画像 | base64, image | Claude API画像入力, マルチモーダル処理, 画像生成 |
+| 22.3 WebSearch | reqwest + API | Exa/SerpAPI/DuckDuckGo, 結果フィルタリング |
+| 22.4 WebFetch | reqwest + scraper | HTMLパース, テキスト抽出, JS レンダリング(オプション) |
+| 22.5 Skills | config + loader | 設計, ローダー, カスタムツール登録, 監視 |
+
+---
+
+## 🔴 Phase 23: High Priority
+
+> **目標**: 主要チャネル・機能追加、達成率 ~65%
+
+| タスク | 技術スタック | 内容 |
+|--------|------------|------|
+| 23.1 iMessage | Apple Script | cc-imessage crate, osascript連携, 送受信 |
+| 23.2 Signal | signal-cli REST | cc-signal crate, API連携, 送受信 |
+| 23.3 Slack | slack-api/reqwest | cc-slack crate, Events API, Socket Mode |
+| 23.4 Sub-Agents | Task delegation | アーキテクチャ, 分散ロジック, 結果集約 |
+| 23.5 Thinking | Claude extended | API対応, level設定, 出力処理 |
+
+---
+
+## 🔴 Phase 24: Medium Priority
+
+> **目標**: 完全パリティ、達成率 ~80%
+
+| タスク | 技術スタック | 内容 |
+|--------|------------|------|
+| 24.1 Browser | headless_chrome/fantoccini | stub→実装, スクショ, フォーム操作 |
+| 24.2 Voice | Whisper/TTS API | 音声認識, 音声合成, Twilio Voice |
+| 24.3 LINE | LINE Messaging API | cc-line crate, Webhook |
+| 24.4 Dashboard | axum + static | UI, セッション履歴, コスト表示 |
+
+---
+
+## 🔴 Phase 25: Superior Features
+
+> **目標**: cc-gateway 独自の優位性確立
+
+| タスク | 内容 |
+|--------|------|
+| 25.1 Performance | ベンチマーク, メモリ最適化, 並列処理 |
+| 25.2 Distribution | cross-compilation, GitHub Releases, Homebrew |
+| 25.3 Security | 監査ログ, 暗号化オプション |
+
+---
+
+## 🚀 拡張可能性
 
 | 機能 | 現状 | 拡張方法 |
 |------|------|---------|
-| ブラウザ自動化 | stub | `headless_chrome` または `fantoccini` 追加 |
-| メール送受信 | stub | `lettre` / `async-imap` feature 有効化 |
+| ブラウザ自動化 | stub | headless_chrome / fantoccini |
+| メール送受信 | stub | lettre / async-imap feature |
 | iMessage | 未実装 | Apple Script 連携 |
 | Signal | 未実装 | signal-cli 連携 |
-| Slack | 未実装 | Slack API (reqwest) |
+| Slack | 未実装 | Slack API |

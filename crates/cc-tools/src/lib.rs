@@ -10,6 +10,8 @@ pub mod write;
 pub mod edit;
 pub mod glob;
 pub mod grep;
+pub mod web_search;
+pub mod web_fetch;
 
 pub use bash::BashTool;
 pub use read::ReadTool;
@@ -17,6 +19,8 @@ pub use write::WriteTool;
 pub use edit::EditTool;
 pub use glob::GlobTool;
 pub use grep::GrepTool;
+pub use web_search::WebSearchTool;
+pub use web_fetch::WebFetchTool;
 
 use std::sync::Arc;
 
@@ -28,4 +32,6 @@ pub fn register_default_tools(manager: &mut ToolManager) {
     manager.register(Arc::new(EditTool));
     manager.register(Arc::new(GlobTool));
     manager.register(Arc::new(GrepTool));
+    manager.register(Arc::new(WebSearchTool::new()));
+    manager.register(Arc::new(WebFetchTool::new()));
 }

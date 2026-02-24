@@ -1,5 +1,5 @@
 [package]
-name = "cc-tools"
+name = "cc-ws"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,14 +15,17 @@ futures.workspace = true
 # Core
 cc-core.workspace = true
 
+# HTTP & WebSocket
+axum = { workspace = true, features = ["ws"] }
+axum-extra.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tokio-tungstenite.workspace = true
+http.workspace = true
+
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
-
-# File operations
-regex.workspace = true
-glob.workspace = true
-grep.workspace = true
 
 # Logging
 tracing.workspace = true
@@ -33,14 +36,8 @@ anyhow.workspace = true
 
 # Utilities
 chrono.workspace = true
-
-# HTTP client for web tools
-reqwest.workspace = true
-urlencoding = "2.1"
-
-# HTML parsing
-scraper = "0.22"
-url = "2.5"
+uuid.workspace = true
+base64 = "0.22"
 
 [dev-dependencies]
-tempfile = "3"
+tokio-test = "0.4"

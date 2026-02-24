@@ -11,6 +11,7 @@ members = [
     "crates/cc-browser",
     "crates/cc-email",
     "crates/cc-api",
+    "crates/cc-ws",       # WebSocket gateway
     "crates/cc-gateway",  # main binary
 ]
 
@@ -30,8 +31,12 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
 axum = "0.8"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
 http = "1"
+
+# WebSocket
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
 
 # Discord
 serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }

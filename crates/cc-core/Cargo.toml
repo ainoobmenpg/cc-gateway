@@ -32,11 +32,16 @@ anyhow.workspace = true
 # Utilities
 chrono.workspace = true
 uuid.workspace = true
+base64 = "0.22"
 
 # Configuration
 toml.workspace = true
 config.workspace = true
 dotenvy.workspace = true
 
+# YAML support for skills
+serde_yaml = "0.9"
+
 [dev-dependencies]
 tokio-test = "0.4"
+tempfile = "3"
