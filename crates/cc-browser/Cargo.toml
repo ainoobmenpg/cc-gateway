@@ -24,3 +24,12 @@ tracing.workspace = true
 # Error handling
 thiserror.workspace = true
 anyhow.workspace = true
+
+# Browser automation
+headless_chrome = "1.0"
+
+# Image processing (for screenshots)
+base64.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

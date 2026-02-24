@@ -8,7 +8,13 @@ members = [
     "crates/cc-discord",
     "crates/cc-telegram",
     "crates/cc-whatsapp",
+    "crates/cc-imessage",  # iMessage gateway (macOS only)
+    "crates/cc-signal",    # Signal gateway
+    "crates/cc-slack",     # Slack gateway
+    "crates/cc-line",      # LINE gateway
     "crates/cc-browser",
+    "crates/cc-voice",     # Voice/Audio (Whisper, TTS)
+    "crates/cc-dashboard", # Web dashboard
     "crates/cc-email",
     "crates/cc-api",
     "crates/cc-ws",       # WebSocket gateway
@@ -28,7 +34,7 @@ repository = "https://github.com/user/cc-gateway"
 tokio = { version = "1", features = ["full"] }
 
 # HTTP client & server
-reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls", "multipart"], default-features = false }
 axum = "0.8"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
@@ -68,16 +74,21 @@ anyhow = "1"
 # Utilities
 async-trait = "0.1"
 futures = "0.3"
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
 regex = "1"
 glob = "0.3"
 grep = "0.3"  # ripgrep library
 dashmap = "5.5"  # Concurrent map
 rustyline = "15"  # CLI readline with completion
+base64 = "0.22"
+mime = "0.3"
 
 # Configuration
 config = "0.15"
 dotenvy = "0.15"
+
+# Benchmarking
+criterion = "0.5"
 
 # Internal crates
 cc-core = { path = "crates/cc-core" }
@@ -87,6 +98,32 @@ cc-schedule = { path = "crates/cc-schedule" }
 cc-discord = { path = "crates/cc-discord" }
 cc-telegram = { path = "crates/cc-telegram" }
 cc-whatsapp = { path = "crates/cc-whatsapp" }
+cc-imessage = { path = "crates/cc-imessage" }
+cc-signal = { path = "crates/cc-signal" }
+cc-slack = { path = "crates/cc-slack" }
+cc-line = { path = "crates/cc-line" }
 cc-browser = { path = "crates/cc-browser" }
 cc-email = { path = "crates/cc-email" }
 cc-api = { path = "crates/cc-api" }
+
+# Release profile optimizations
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+strip = true
+panic = "abort"
+
+# Profile for development with some optimizations
+[profile.dev-release]
+inherits = "release"
+lto = false
+codegen-units = 16
+debug = 1
+
+# Profile for testing with optimizations
+[profile.test-release]
+inherits = "release"
+lto = false
+opt-level = 2
+debug = 1

@@ -204,6 +204,7 @@ async fn execute_task(
         system: Some(system_prompt.to_string()),
         messages,
         tools: Some(tools),
+        thinking: None,
     };
 
     let response = client.messages(request).await?;

@@ -201,6 +201,7 @@ impl ClaudeClient {
                 system: system.clone(),
                 messages: current_messages.clone(),
                 tools: Some(tools.clone()),
+                thinking: None,
             };
 
             let response = self.messages(request).await?;

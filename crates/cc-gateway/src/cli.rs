@@ -204,6 +204,7 @@ async fn run_agent_turn(
             system: Some(system_prompt.to_string()),
             messages: messages.clone(),
             tools: Some(get_tool_definitions(tool_manager)),
+            thinking: None,
         };
 
         let response = client.messages(request).await?;

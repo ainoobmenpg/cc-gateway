@@ -1,0 +1,228 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux targets
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            archive: tar.gz
+          # macOS targets
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          # Windows targets
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          strip cc-gateway || true
+          chmod +x cc-gateway
+
+      - name: Create archive (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czvf cc-gateway-${{ matrix.target }}.tar.gz cc-gateway
+          mv cc-gateway-${{ matrix.target }}.tar.gz ${{ github.workspace }}/
+
+      - name: Create archive (zip)
+        if: matrix.archive == 'zip'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a cc-gateway-${{ matrix.target }}.zip cc-gateway.exe
+          mv cc-gateway-${{ matrix.target }}.zip ${{ github.workspace }}/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cc-gateway-${{ matrix.target }}
+          path: cc-gateway-${{ matrix.target }}.*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+            git log --pretty=format:"- %s" $PREV_TAG..HEAD >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "CHANGELOG=Initial release" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: cc-gateway v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Changes
+            ${{ steps.changelog.outputs.CHANGELOG }}
+
+            ## Installation
+
+            ### macOS (Homebrew)
+            ```bash
+            brew tap user/cc-gateway
+            brew install cc-gateway
+            ```
+
+            ### Linux/macOS (Binary)
+            Download the appropriate archive for your platform, extract, and place in your PATH.
+
+            ### Windows
+            Download `cc-gateway-x86_64-pc-windows-msvc.zip` or `cc-gateway-aarch64-pc-windows-msvc.zip`, extract, and add to PATH.
+
+            ## Verification
+            All binaries are built in CI. Verify with `cc-gateway --version`.
+          files: |
+            artifacts/**/cc-gateway-*.tar.gz
+            artifacts/**/cc-gateway-*.zip
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+
+  # Update Homebrew formula
+  homebrew:
+    name: Update Homebrew Formula
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref, '-') }}  # Skip prereleases
+
+    steps:
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Checkout homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: user/homebrew-cc-gateway
+          token: ${{ secrets.HOMEBREW_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        run: |
+          cd homebrew-tap
+          cat > Formula/cc-gateway.rb << 'EOF'
+          class CcGateway < Formula
+            desc "Pure Rust Claude API Gateway"
+            homepage "https://github.com/user/cc-gateway"
+            version "${{ steps.version.outputs.VERSION }}"
+            license "MIT"
+
+            on_macos do
+              on_intel do
+                url "https://github.com/user/cc-gateway/releases/download/v#{version}/cc-gateway-x86_64-apple-darwin.tar.gz"
+                sha256 "PLACEHOLDER_SHA256"
+              end
+              on_arm do
+                url "https://github.com/user/cc-gateway/releases/download/v#{version}/cc-gateway-aarch64-apple-darwin.tar.gz"
+                sha256 "PLACEHOLDER_SHA256"
+              end
+            end
+
+            on_linux do
+              on_intel do
+                url "https://github.com/user/cc-gateway/releases/download/v#{version}/cc-gateway-x86_64-unknown-linux-musl.tar.gz"
+                sha256 "PLACEHOLDER_SHA256"
+              end
+              on_arm do
+                url "https://github.com/user/cc-gateway/releases/download/v#{version}/cc-gateway-aarch64-unknown-linux-musl.tar.gz"
+                sha256 "PLACEHOLDER_SHA256"
+              end
+            end
+
+            def install
+              bin.install "cc-gateway"
+            end
+
+            test do
+              assert_match "cc-gateway", shell_output("#{bin}/cc-gateway --version")
+            end
+          end
+          EOF
+
+      - name: Commit and push formula
+        run: |
+          cd homebrew-tap
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add Formula/cc-gateway.rb
+          git commit -m "Update to v${{ steps.version.outputs.VERSION }}"
+          git push

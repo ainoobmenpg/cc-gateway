@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  cc-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cc-gateway:latest
+    container_name: cc-gateway
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-20250514}
+      - DB_PATH=/data/cc-gateway.db
+      - API_KEY=${API_KEY:-}
+      - API_PORT=3000
+    volumes:
+      - cc-gateway-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Discord bot service (optional)
+  cc-gateway-discord:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cc-gateway:latest
+    container_name: cc-gateway-discord
+    restart: unless-stopped
+    command: ["discord"]
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-20250514}
+      - DB_PATH=/data/cc-gateway.db
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+    volumes:
+      - cc-gateway-data:/data
+    profiles:
+      - discord
+
+volumes:
+  cc-gateway-data:
+    driver: local
+
+networks:
+  default:
+    name: cc-gateway-network

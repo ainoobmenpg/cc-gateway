@@ -1,0 +1,43 @@
+[package]
+name = "cc-slack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Async
+tokio.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+
+# Core
+cc-core.workspace = true
+
+# HTTP client
+reqwest.workspace = true
+
+# WebSocket
+tokio-tungstenite.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Utilities
+chrono.workspace = true
+uuid.workspace = true
+dashmap.workspace = true
+url = "2"
+
+[dev-dependencies]
+tokio-test = "0.4"
+wiremock = "0.6"

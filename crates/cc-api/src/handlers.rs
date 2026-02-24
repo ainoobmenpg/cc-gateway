@@ -112,6 +112,7 @@ pub async fn chat(
         system: req.system,
         messages: vec![Message::user(&req.message)],
         tools: None,
+        thinking: None,
     };
 
     // Call Claude API

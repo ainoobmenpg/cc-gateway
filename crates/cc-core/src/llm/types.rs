@@ -100,6 +100,31 @@ pub enum MessageContent {
         #[serde(default)]
         is_error: bool,
     },
+    /// Extended thinking block (Claude 3.7+)
+    Thinking {
+        thinking: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        signature: Option<String>,
+    },
+    /// Redacted thinking block (when thinking is sensitive)
+    RedactedThinking {
+        data: String,
+    },
+}
+
+impl MessageContent {
+    /// Check if this is a thinking block
+    pub fn is_thinking(&self) -> bool {
+        matches!(self, Self::Thinking { .. } | Self::RedactedThinking { .. })
+    }
+
+    /// Get thinking content if this is a thinking block
+    pub fn thinking_content(&self) -> Option<&str> {
+        match self {
+            Self::Thinking { thinking, .. } => Some(thinking),
+            _ => None,
+        }
+    }
 }
 
 /// Image source for multimodal input
@@ -217,6 +242,100 @@ impl ToolDefinition {
     }
 }
 
+/// Thinking configuration for Claude 3.7+ extended thinking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThinkingConfig {
+    /// Thinking type: "enabled" or "disabled"
+    #[serde(rename = "type")]
+    pub thinking_type: String,
+    /// Budget tokens for thinking (minimum 1024 when enabled)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget_tokens: Option<u64>,
+}
+
+impl ThinkingConfig {
+    /// Default thinking budget
+    pub const DEFAULT_BUDGET: u64 = 1024;
+    /// Maximum thinking budget
+    pub const MAX_BUDGET: u64 = 128_000;
+    /// Minimum thinking budget
+    pub const MIN_BUDGET: u64 = 1024;
+
+    /// Create a disabled thinking config
+    pub fn disabled() -> Self {
+        Self {
+            thinking_type: "disabled".to_string(),
+            budget_tokens: None,
+        }
+    }
+
+    /// Create an enabled thinking config with default budget
+    pub fn enabled() -> Self {
+        Self::with_budget(Self::DEFAULT_BUDGET)
+    }
+
+    /// Create an enabled thinking config with custom budget
+    pub fn with_budget(budget_tokens: u64) -> Self {
+        let budget = budget_tokens.clamp(Self::MIN_BUDGET, Self::MAX_BUDGET);
+        Self {
+            thinking_type: "enabled".to_string(),
+            budget_tokens: Some(budget),
+        }
+    }
+
+    /// Check if thinking is enabled
+    pub fn is_enabled(&self) -> bool {
+        self.thinking_type == "enabled"
+    }
+}
+
+impl Default for ThinkingConfig {
+    fn default() -> Self {
+        Self::disabled()
+    }
+}
+
+/// Thinking level preset
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ThinkingLevel {
+    /// No extended thinking
+    #[default]
+    None,
+    /// Light thinking (1024 tokens)
+    Light,
+    /// Medium thinking (8192 tokens)
+    Medium,
+    /// Heavy thinking (32768 tokens)
+    Heavy,
+    /// Maximum thinking (128000 tokens)
+    Max,
+}
+
+impl ThinkingLevel {
+    /// Convert to ThinkingConfig
+    pub fn to_config(&self) -> ThinkingConfig {
+        match self {
+            Self::None => ThinkingConfig::disabled(),
+            Self::Light => ThinkingConfig::with_budget(1024),
+            Self::Medium => ThinkingConfig::with_budget(8192),
+            Self::Heavy => ThinkingConfig::with_budget(32768),
+            Self::Max => ThinkingConfig::with_budget(128_000),
+        }
+    }
+
+    /// Get budget tokens for this level
+    pub fn budget_tokens(&self) -> u64 {
+        match self {
+            Self::None => 0,
+            Self::Light => 1024,
+            Self::Medium => 8192,
+            Self::Heavy => 32768,
+            Self::Max => 128_000,
+        }
+    }
+}
+
 /// Messages API request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessagesRequest {
@@ -228,6 +347,9 @@ pub struct MessagesRequest {
     pub messages: Vec<Message>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ToolDefinition>>,
+    /// Extended thinking configuration (Claude 3.7+)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingConfig>,
 }
 
 /// Messages API response
@@ -251,6 +373,31 @@ pub struct MessagesResponse {
 pub struct Usage {
     pub input_tokens: u64,
     pub output_tokens: u64,
+    /// Thinking tokens used (Claude 3.7+ extended thinking)
+    #[serde(default)]
+    pub thinking_tokens: u64,
+    /// Cache read tokens (if prompt caching is used)
+    #[serde(default)]
+    pub cache_read_tokens: u64,
+    /// Cache write tokens (if prompt caching is used)
+    #[serde(default)]
+    pub cache_write_tokens: u64,
+}
+
+impl Usage {
+    /// Get total tokens (input + output + thinking)
+    pub fn total_tokens(&self) -> u64 {
+        self.input_tokens + self.output_tokens + self.thinking_tokens
+    }
+
+    /// Calculate approximate cost in dollars (Claude 3.7 Sonnet pricing)
+    /// Input: $3/M, Output: $15/M
+    pub fn estimated_cost_dollars(&self) -> f64 {
+        let input_cost = (self.input_tokens as f64) / 1_000_000.0 * 3.0;
+        let output_cost = (self.output_tokens as f64) / 1_000_000.0 * 15.0;
+        let thinking_cost = (self.thinking_tokens as f64) / 1_000_000.0 * 15.0; // Thinking counts as output
+        input_cost + output_cost + thinking_cost
+    }
 }
 
 // ============================================================================
@@ -466,6 +613,9 @@ impl ChatCompletionResponse {
             usage: self.usage.as_ref().map(|u| Usage {
                 input_tokens: u.prompt_tokens,
                 output_tokens: u.completion_tokens,
+                thinking_tokens: 0,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
             }),
         }
     }
@@ -478,6 +628,7 @@ pub struct MessagesRequestBuilder {
     system: Option<String>,
     messages: Vec<Message>,
     tools: Vec<ToolDefinition>,
+    thinking: Option<ThinkingConfig>,
 }
 
 impl MessagesRequestBuilder {
@@ -488,6 +639,7 @@ impl MessagesRequestBuilder {
             system: None,
             messages: vec![],
             tools: vec![],
+            thinking: None,
         }
     }
 
@@ -521,6 +673,34 @@ impl MessagesRequestBuilder {
         self
     }
 
+    /// Enable extended thinking with default budget
+    pub fn thinking(mut self) -> Self {
+        self.thinking = Some(ThinkingConfig::enabled());
+        self
+    }
+
+    /// Enable extended thinking with custom budget
+    pub fn thinking_with_budget(mut self, budget_tokens: u64) -> Self {
+        self.thinking = Some(ThinkingConfig::with_budget(budget_tokens));
+        self
+    }
+
+    /// Set thinking level
+    pub fn thinking_level(mut self, level: ThinkingLevel) -> Self {
+        if level == ThinkingLevel::None {
+            self.thinking = None;
+        } else {
+            self.thinking = Some(level.to_config());
+        }
+        self
+    }
+
+    /// Set thinking configuration directly
+    pub fn thinking_config(mut self, config: ThinkingConfig) -> Self {
+        self.thinking = Some(config);
+        self
+    }
+
     pub fn build(self) -> MessagesRequest {
         MessagesRequest {
             model: self.model,
@@ -532,6 +712,7 @@ impl MessagesRequestBuilder {
             } else {
                 Some(self.tools)
             },
+            thinking: self.thinking,
         }
     }
 }
@@ -657,5 +838,141 @@ mod tests {
         // Should contain both text and image content
         assert!(json.contains(r#""type":"text""#));
         assert!(json.contains(r#""type":"image""#));
+    }
+
+    // Thinking tests
+
+    #[test]
+    fn test_thinking_config_disabled() {
+        let config = ThinkingConfig::disabled();
+        assert!(!config.is_enabled());
+        assert!(config.budget_tokens.is_none());
+    }
+
+    #[test]
+    fn test_thinking_config_enabled() {
+        let config = ThinkingConfig::enabled();
+        assert!(config.is_enabled());
+        assert_eq!(config.budget_tokens, Some(1024));
+    }
+
+    #[test]
+    fn test_thinking_config_with_budget() {
+        let config = ThinkingConfig::with_budget(8192);
+        assert!(config.is_enabled());
+        assert_eq!(config.budget_tokens, Some(8192));
+    }
+
+    #[test]
+    fn test_thinking_config_budget_clamping() {
+        // Below minimum
+        let config = ThinkingConfig::with_budget(100);
+        assert_eq!(config.budget_tokens, Some(1024));
+
+        // Above maximum
+        let config = ThinkingConfig::with_budget(1_000_000);
+        assert_eq!(config.budget_tokens, Some(128_000));
+    }
+
+    #[test]
+    fn test_thinking_level_to_config() {
+        assert!(!ThinkingLevel::None.to_config().is_enabled());
+        assert!(ThinkingLevel::Light.to_config().is_enabled());
+        assert_eq!(ThinkingLevel::Medium.budget_tokens(), 8192);
+        assert_eq!(ThinkingLevel::Heavy.budget_tokens(), 32768);
+        assert_eq!(ThinkingLevel::Max.budget_tokens(), 128_000);
+    }
+
+    #[test]
+    fn test_message_content_thinking() {
+        let thinking = MessageContent::Thinking {
+            thinking: "Let me think about this...".to_string(),
+            signature: Some("sig123".to_string()),
+        };
+
+        assert!(thinking.is_thinking());
+        assert_eq!(thinking.thinking_content(), Some("Let me think about this..."));
+    }
+
+    #[test]
+    fn test_message_content_redacted_thinking() {
+        let redacted = MessageContent::RedactedThinking {
+            data: "redacted_data".to_string(),
+        };
+
+        assert!(redacted.is_thinking());
+        assert!(redacted.thinking_content().is_none());
+    }
+
+    #[test]
+    fn test_usage_with_thinking() {
+        let usage = Usage {
+            input_tokens: 100,
+            output_tokens: 50,
+            thinking_tokens: 200,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+        };
+
+        assert_eq!(usage.total_tokens(), 350);
+
+        // Test cost calculation (approximately)
+        let cost = usage.estimated_cost_dollars();
+        assert!(cost > 0.0);
+        // 100 * 3/1M + 250 * 15/1M = 0.0003 + 0.00375 = 0.00405
+        assert!(cost < 0.01);
+    }
+
+    #[test]
+    fn test_messages_request_with_thinking() {
+        let request = MessagesRequestBuilder::new("claude-sonnet-4-20250514".to_string())
+            .user("What is 2+2?")
+            .thinking()
+            .build();
+
+        assert!(request.thinking.is_some());
+        assert!(request.thinking.unwrap().is_enabled());
+    }
+
+    #[test]
+    fn test_messages_request_with_thinking_level() {
+        let request = MessagesRequestBuilder::new("claude-sonnet-4-20250514".to_string())
+            .user("Solve this complex problem")
+            .thinking_level(ThinkingLevel::Heavy)
+            .build();
+
+        let thinking = request.thinking.unwrap();
+        assert!(thinking.is_enabled());
+        assert_eq!(thinking.budget_tokens, Some(32768));
+    }
+
+    #[test]
+    fn test_messages_request_without_thinking() {
+        let request = MessagesRequestBuilder::new("claude-sonnet-4-20250514".to_string())
+            .user("Hello")
+            .build();
+
+        assert!(request.thinking.is_none());
+    }
+
+    #[test]
+    fn test_thinking_serialization() {
+        let config = ThinkingConfig::with_budget(8192);
+        let json = serde_json::to_string(&config).unwrap();
+
+        assert!(json.contains(r#""type":"enabled""#));
+        assert!(json.contains(r#""budget_tokens":8192"#));
+    }
+
+    #[test]
+    fn test_thinking_content_serialization() {
+        let content = MessageContent::Thinking {
+            thinking: "I need to analyze this...".to_string(),
+            signature: Some("abc123".to_string()),
+        };
+
+        let json = serde_json::to_string(&content).unwrap();
+        assert!(json.contains(r#""type":"thinking""#));
+        assert!(json.contains("I need to analyze this"));
     }
 }

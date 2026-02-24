@@ -214,6 +214,7 @@ async fn handle_chat(
         system: system_prompt.or_else(|| state.default_system_prompt.clone()),
         messages,
         tools: if tools.is_empty() { None } else { Some(tools) },
+        thinking: None,
     };
 
     // Send to Claude API
