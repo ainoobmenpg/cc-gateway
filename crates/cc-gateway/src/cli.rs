@@ -6,9 +6,11 @@
 use cc_core::{ClaudeClient, Message, MessageContent, ToolManager, ToolResult};
 use cc_core::llm::{MessagesRequest, ToolDefinition};
 use cc_tools::register_default_tools;
-use rustyline::error::ReadlineError;
-use rustyline::history::DefaultHistory;
-use rustyline::{CompletionType, Config, EditMode, Editor};
+use nu_ansi_term::{Color, Style};
+use reedline::{
+    ColumnarMenu, Completer, DefaultHinter, Emacs, KeyCode, KeyModifiers,
+    Keybindings, MenuBuilder, Prompt, Reedline, ReedlineEvent, ReedlineMenu, Signal, Suggestion,
+};
 use serde_json::Value as JsonValue;
 use std::path::Path;
 use tracing::info;
@@ -21,6 +23,87 @@ const COMMANDS: &[(&str, &str)] = &[
     ("/clear", "会話履歴をクリア"),
     ("/history", "会話履歴を表示"),
 ];
+
+/// Command completer for reedline
+#[derive(Clone)]
+pub struct CommandCompleter {
+    commands: Vec<(&'static str, &'static str)>,
+}
+
+impl CommandCompleter {
+    pub fn new() -> Self {
+        Self {
+            commands: COMMANDS.to_vec(),
+        }
+    }
+}
+
+impl Default for CommandCompleter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Completer for CommandCompleter {
+    fn complete(&mut self, line: &str, pos: usize) -> Vec<Suggestion> {
+        // 行頭が / で始まる場合は常に候補を表示
+        // pos != line.len() のチェックを削除して、編集中でも候補を表示
+        if !line.starts_with('/') {
+            return Vec::new();
+        }
+
+        self.commands
+            .iter()
+            .filter(|(cmd, _)| cmd.starts_with(line))
+            .map(|(cmd, desc)| Suggestion {
+                value: cmd.to_string(),
+                description: Some(desc.to_string()),
+                extra: None,
+                span: reedline::Span::new(0, pos),
+                append_whitespace: true,
+                style: None,
+            })
+            .collect()
+    }
+}
+
+/// Custom prompt with colored styling
+struct ColoredPrompt {
+    style: Style,
+}
+
+impl ColoredPrompt {
+    fn new() -> Self {
+        Self {
+            style: Color::Cyan.bold(),
+        }
+    }
+}
+
+impl Prompt for ColoredPrompt {
+    fn render_prompt_left(&self) -> std::borrow::Cow<'_, str> {
+        std::borrow::Cow::Owned(self.style.paint("> ").to_string())
+    }
+
+    fn render_prompt_right(&self) -> std::borrow::Cow<'_, str> {
+        std::borrow::Cow::Borrowed("")
+    }
+
+    fn render_prompt_indicator(&self, _prompt_mode: reedline::PromptEditMode) -> std::borrow::Cow<'_, str> {
+        std::borrow::Cow::Borrowed("")
+    }
+
+    fn render_prompt_multiline_indicator(&self) -> std::borrow::Cow<'_, str> {
+        std::borrow::Cow::Borrowed("")
+    }
+
+    fn render_prompt_history_search_indicator(
+        &self,
+        _history_search: reedline::PromptHistorySearch,
+    ) -> std::borrow::Cow<'_, str> {
+        std::borrow::Cow::Borrowed("")
+    }
+}
 
 /// CLI configuration
 pub struct CliConfig {
@@ -57,51 +140,51 @@ pub async fn run_cli_with_config(client: ClaudeClient, cli_config: CliConfig) ->
     // Welcome message
     print_welcome();
 
-    // Setup rustyline with basic config
-    let config = Config::builder()
-        .history_ignore_space(true)
-        .completion_type(CompletionType::List)
-        .edit_mode(EditMode::Emacs)
-        .build();
+    // Setup keybindings
+    let mut keybindings = default_keybindings();
 
-    let mut rl: Editor<(), DefaultHistory> = Editor::with_config(config)?;
+    // Trigger completion on '/' key
+    keybindings.add_binding(
+        KeyModifiers::NONE,
+        KeyCode::Char('/'),
+        ReedlineEvent::Edit(vec![reedline::EditCommand::Complete]),
+    );
+
+    // Setup menu - with_only_buffer_difference(false) makes menu show even without buffer changes
+    let menu = Box::new(
+        ColumnarMenu::default()
+            .with_name("command_menu")
+            .with_columns(1)
+            .with_column_width(Some(40))
+            .with_only_buffer_difference(false),
+    );
+
+    // Setup hinter
+    let hinter = DefaultHinter::default().with_style(Style::new().dimmed());
+
+    // Create line editor
+    let mut line_editor = Reedline::create()
+        .with_completer(Box::new(CommandCompleter::new()))
+        .with_menu(ReedlineMenu::EngineCompleter(menu))
+        .with_hinter(Box::new(hinter))
+        .with_edit_mode(Box::new(Emacs::new(keybindings)));
+
+    let prompt = ColoredPrompt::new();
 
     // Conversation history
     let mut messages: Vec<cc_core::Message> = Vec::new();
 
     loop {
-        // Read user input with readline (colored prompt)
-        let readline = rl.readline("\x1b[1;36m> \x1b[0m");
+        let signal = line_editor.read_line(&prompt);
 
-        match readline {
-            Ok(line) => {
+        match signal {
+            Ok(Signal::Success(line)) => {
                 let input = line.trim();
 
                 // Handle empty input
                 if input.is_empty() {
                     continue;
                 }
-
-                // Check for partial command match and show suggestions
-                if input.starts_with('/') && !COMMANDS.iter().any(|(cmd, _)| *cmd == input.to_lowercase().as_str()) {
-                    // Show matching commands
-                    let matches: Vec<_> = COMMANDS
-                        .iter()
-                        .filter(|(cmd, _)| cmd.starts_with(&input.to_lowercase()))
-                        .collect();
-
-                    if !matches.is_empty() {
-                        println!("\n💡 コマンド候補:");
-                        for (cmd, desc) in matches {
-                            println!("  {} - {}", cmd, desc);
-                        }
-                        println!();
-                        continue;
-                    }
-                }
-
-                // Add to history
-                let _ = rl.add_history_entry(input.to_string());
 
                 // Handle special commands
                 if handle_command(input, &mut messages) {
@@ -133,11 +216,11 @@ pub async fn run_cli_with_config(client: ClaudeClient, cli_config: CliConfig) ->
                     }
                 }
             }
-            Err(ReadlineError::Interrupted) => {
-                println!("\n^C");
+            Ok(Signal::CtrlC) => {
+                println!("^C");
                 continue;
             }
-            Err(ReadlineError::Eof) => {
+            Ok(Signal::CtrlD) => {
                 println!("\n👋 さようなら！\n");
                 break;
             }
@@ -149,6 +232,49 @@ pub async fn run_cli_with_config(client: ClaudeClient, cli_config: CliConfig) ->
     }
 
     Ok(())
+}
+
+/// Default keybindings for reedline
+fn default_keybindings() -> Keybindings {
+    let mut keybindings = Keybindings::new();
+    // Tab key triggers completion
+    keybindings.add_binding(
+        KeyModifiers::NONE,
+        KeyCode::Tab,
+        ReedlineEvent::Edit(vec![reedline::EditCommand::Complete]),
+    );
+    keybindings.add_binding(
+        KeyModifiers::NONE,
+        KeyCode::Enter,
+        ReedlineEvent::Submit,
+    );
+    // Esc key clears/closes menus
+    keybindings.add_binding(
+        KeyModifiers::NONE,
+        KeyCode::Esc,
+        ReedlineEvent::Esc,
+    );
+    keybindings.add_binding(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('c'),
+        ReedlineEvent::CtrlC,
+    );
+    keybindings.add_binding(
+        KeyModifiers::CONTROL,
+        KeyCode::Char('d'),
+        ReedlineEvent::CtrlD,
+    );
+    keybindings.add_binding(
+        KeyModifiers::NONE,
+        KeyCode::Up,
+        ReedlineEvent::Up,
+    );
+    keybindings.add_binding(
+        KeyModifiers::NONE,
+        KeyCode::Down,
+        ReedlineEvent::Down,
+    );
+    keybindings
 }
 
 /// Handle special commands (/, /exit, /clear, /help)
@@ -305,7 +431,7 @@ fn print_welcome() {
     println!("╠════════════════════════════════════════════════════════════╣");
     println!("║  メッセージを入力して Enter でチャット開始                  ║");
     println!("║  コマンド: /help, /exit, /clear, /history                  ║");
-    println!("║  入力中に候補が自動表示されます                             ║");
+    println!("║  / を入力するとコマンド候補が表示されます                   ║");
     println!("╚════════════════════════════════════════════════════════════╝");
     println!();
 }
@@ -319,6 +445,7 @@ fn print_help() {
     }
     println!();
     println!("💡 ヒント: / から入力するとコマンド候補が表示されます");
+    println!("💡 矢印キー(↑/↓)で候補を選択、Enterで確定できます");
     println!();
 }
 

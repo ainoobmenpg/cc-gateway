@@ -284,7 +284,7 @@ impl Config {
 
         // provider 文字列から LlmProvider への変換
         let provider = match llm.provider.unwrap_or_default().to_lowercase().as_str() {
-            "openai" | "glm" | "zai" => LlmProvider::OpenAi,
+            "openai" | "glm" | "zai" | "minimax" => LlmProvider::OpenAi,
             _ => LlmProvider::Claude,
         };
 
@@ -357,24 +357,34 @@ impl Config {
             self.claude_api_key = api_key;
         }
 
+        // Only use LLM_MODEL/CLAUDE_MODEL if they are explicitly set and non-empty
+        // (don't use ANTHROPIC_* to avoid shell environment conflicts)
         if let Ok(model) = std::env::var("LLM_MODEL") {
-            self.llm.model = model.clone();
-            self.claude_model = model;
-        }
-        if let Ok(model) = std::env::var("CLAUDE_MODEL") {
-            self.llm.model = model.clone();
-            self.claude_model = model;
+            if !model.is_empty() {
+                self.llm.model = model.clone();
+                self.claude_model = model;
+            }
+        } else if let Ok(model) = std::env::var("CLAUDE_MODEL") {
+            if !model.is_empty() {
+                self.llm.model = model.clone();
+                self.claude_model = model;
+            }
         }
 
         if let Ok(provider) = std::env::var("LLM_PROVIDER") {
-            self.llm.provider = match provider.to_lowercase().as_str() {
-                "openai" | "glm" | "zai" => LlmProvider::OpenAi,
-                _ => LlmProvider::Claude,
-            };
+            if !provider.is_empty() {
+                self.llm.provider = match provider.to_lowercase().as_str() {
+                    "openai" | "glm" | "zai" | "minimax" => LlmProvider::OpenAi,
+                    _ => LlmProvider::Claude,
+                };
+            }
         }
 
+        // Only use LLM_BASE_URL if explicitly set and non-empty (respect TOML config)
         if let Ok(base_url) = std::env::var("LLM_BASE_URL") {
-            self.llm.base_url = Some(base_url);
+            if !base_url.is_empty() {
+                self.llm.base_url = Some(base_url);
+            }
         }
 
         // Discord 設定の上書き
@@ -442,7 +452,7 @@ impl Config {
 
         // Determine provider
         let provider = match std::env::var("LLM_PROVIDER").unwrap_or_default().to_lowercase().as_str() {
-            "openai" | "glm" | "zai" => LlmProvider::OpenAi,
+            "openai" | "glm" | "zai" | "minimax" => LlmProvider::OpenAi,
             _ => LlmProvider::Claude,
         };
 

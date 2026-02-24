@@ -12,17 +12,34 @@
 # LLM 設定
 # ============================================================================
 [llm]
-# API プロバイダー: "claude" または "openai"
+# API プロバイダー: "claude" または "openai" (または "minimax")
+# provider = "claude"      # Anthropic Claude API
+# provider = "openai"      # OpenAI 互換 API (GLM, ZAI など)
+# provider = "minimax"     # MiniMax API
 provider = "openai"
 
 # モデル名
+# Claude: "claude-sonnet-4-20250514", "claude-opus-4-6-20251114"
+# GLM: "glm-4.7", "glm-4-flash"
+# MiniMax: "MiniMax-M2.5", "MiniMax-M2"
 model = "glm-4.7"
 
 # API キー（環境変数から取得を推奨）
 api_key = "${LLM_API_KEY}"
 
 # カスタム API エンドポイント（オプション）
+# GLM: "https://api.z.ai/api/coding/paas/v4"
+# MiniMax: "https://api.minimax.io/v1"
 base_url = "https://api.z.ai/api/coding/paas/v4"
+
+# ============================================================================
+# MiniMax 設定例（コメントアウト）
+# ============================================================================
+# [llm]
+# provider = "minimax"
+# model = "MiniMax-M2.5"
+# api_key = "${MINIMAX_API_KEY}"
+# base_url = "https://api.minimax.io/v1"
 
 # ============================================================================
 # Discord 設定（オプション）

@@ -60,6 +60,13 @@ impl ClaudeClient {
         &self,
         request: MessagesRequest,
     ) -> Result<MessagesResponse> {
+        // MiniMax uses OpenAI-compatible /chat/completions endpoint
+        // The base_url should be like "https://api.minimax.io/v1"
+        if self.base_url.contains("minimax.io") {
+            // MiniMax always uses OpenAI-compatible endpoint
+            return self.send_openai_request(request).await;
+        }
+
         match self.provider {
             LlmProvider::Claude => self.send_claude_request(request).await,
             LlmProvider::OpenAi => self.send_openai_request(request).await,

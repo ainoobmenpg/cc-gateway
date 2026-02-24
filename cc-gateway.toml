@@ -1,0 +1,14 @@
+# cc-gateway 設定ファイル (MiniMax 用)
+# Coding Plan API キー使用時
+
+[llm]
+provider = "openai"
+model = "MiniMax-M2.5"
+base_url = "https://api.minimax.io/v1"
+api_key = "${MINIMAX_API_KEY}"
+
+[memory]
+db_path = "data/cc-gateway.db"
+
+[mcp]
+enabled = true
