@@ -57,7 +57,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    // Load .env file
+    // Load .env file (always, before TOML config)
+    // This allows .env to provide API keys that TOML config references
     dotenvy::dotenv().ok();
 
     // Load configuration (TOML file + environment variables)
