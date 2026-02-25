@@ -1,216 +1,349 @@
-# 計画: cc-gateway (Pure Rust) 実装
+# cc-gateway Architecture
 
-## Context
-
-ユーザーは **OpenClawの機能をClaude Codeで置き換え**、新規リポジトリ **cc-gateway** をPure Rustで開発したい。
-
-### 要件
-- **リポジトリ名**: `cc-gateway`
-- **場所**: `~/GitHub/cc-gateway/`
-- **技術スタック**: Rust 2024 Edition のみ（TypeScript/Node.js不使用）
-- **目的**: Claude APIを直接使用し、OpenClaw相当の機能をRustで実現
-
-### 技術的実現可能性: **高い**
-- Claude Agent SDKはTypeScript専用だが、**HTTP REST APIを直接叩けばRustで実装可能**
-- 既存cc-discord-botのパターンを再利用
+> Pure Rust Claude API Gateway - OpenClaw 100% Compatible Implementation
+>
+> Updated: 2026-02-25
 
 ---
 
-## アーキテクチャ
+## Overview
+
+cc-gateway is a pure Rust implementation of a Claude API Gateway that provides 18+ communication channels, 15+ tools, and 9-layer security.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                       Discord                           │
-└────────────────────────┬────────────────────────────────┘
-                         ↓
-┌─────────────────────────────────────────────────────────┐
-│                    cc-gateway                           │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │  cc-discord (Serenity)  │  cc-api (axum)        │   │
-│  │  - Slash Commands       │  - REST API           │   │
-│  │  - Message Handler      │  - 認証/レートリミット │   │
-│  └────────────┬────────────┴───────────────┬───────┘   │
-│               │                            │           │
-│               └──────────┬─────────────────┘           │
-│                          ↓                             │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │                 cc-core                           │ │
-│  │  ┌─────────────┐  ┌──────────┐  ┌─────────────┐  │ │
-│  │  │ Claude API  │  │  Agent   │  │   Session   │  │ │
-│  │  │ HTTP Client │  │  Loop    │  │   Manager   │  │ │
-│  │  └──────┬──────┘  └────┬─────┘  └─────────────┘  │ │
-│  │         │              │                         │ │
-│  │  ┌──────┴──────────────┴──────────────────┐     │ │
-│  │  │            Tool System                  │     │ │
-│  │  │  Bash | Read | Write | Edit | Glob ... │     │ │
-│  │  └────────────────────────────────────────┘     │ │
-│  └───────────────────────────────────────────────────┘ │
-│                          │                             │
-│  ┌───────────────────────┴───────────────────────┐    │
-│  │  cc-mcp (rmcp)  │  Memory (SQLite)  │  Schedule │   │
-│  └───────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           cc-gateway                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
+│  │ Discord  │ │ Telegram │ │ WhatsApp │ │  Signal  │ │  Slack   │          │
+│  │  (poise)│ │teloxide  │ │ Twilio   │ │signal-cli│ │ slack-rs │          │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘          │
+│       │            │            │            │            │                 │
+│  ┌────┴────────────┴────────────┴────────────┴────────────┴────┐           │
+│  │                    cc-core (Agent Loop)                     │           │
+│  │  ┌──────────────────────────────────────────────────────┐  │           │
+│  │  │              LLM Client (Claude/OpenAI/GLM)           │  │           │
+│  │  └──────────────────────────────────────────────────────┘  │           │
+│  │                           │                                 │           │
+│  │  ┌──────────────────────────────────────────────────────┐  │           │
+│  │  │                  Tool System                          │  │           │
+│  │  │  Bash | Read | Write | Edit | Glob | Grep | ls ...   │  │           │
+│  │  └──────────────────────────────────────────────────────┘  │           │
+│  │                           │                                 │           │
+│  │  ┌───────────┐  ┌──────────┴───────────┐  ┌─────────────┐  │           │
+│  │  │  Session  │  │      Memory         │  │   Skills    │  │           │
+│  │  │ Manager   │  │   (SQLite Store)   │  │  (inject)   │  │           │
+│  │  └───────────┘  └─────────────────────┘  └─────────────┘  │           │
+│  └──────────────────────────────────────────────────────────┘           │
+│                           │                                               │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │
+│  │  iMessage │ │   LINE   │ │  Email   │ │  Twitter │ │Instagram │       │
+│  │AppleScript│ │    API   │ │  SMTP    │ │ API v2   │ │   API    │       │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘       │
+│       │            │            │            │            │              │
+│  ┌────┴────────────┴────────────┴────────────┴────────────┴────┐         │
+│  │                    Platform Layer                          │         │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  │         │
+│  │  │    CLI   │  │ HTTP API │  │WebSocket │  │  Dashboard │  │         │
+│  │  │   (REPL) │  │  (axum)  │  │(tungstenite)│ │  (static)  │  │         │
+│  │  └──────────┘  └──────────┘  └──────────┘  └────────────┘  │         │
+│  │                                                              │         │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  │         │
+│  │  │  Voice   │  │ Calendar │  │ Contacts │  │  Browser   │  │         │
+│  │  │(TTS/WSP) │  │ CalDAV   │  │ CardDAV  │  │headless-chr│  │         │
+│  │  └──────────┘  └──────────┘  └──────────┘  └────────────┘  │         │
+│  └────────────────────────────────────────────────────────────┘         │
+│                           │                                               │
+│  ┌────────────────────────┴────────────────────────────────────────┐    │
+│  │                     Support Systems                              │    │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐       │    │
+│  │  │ Scheduler│  │    MCP   │  │ Security │  │  Approval  │       │    │
+│  │  │  (cron)  │  │ (rmcp)   │  │ (9-layer)│  │  System   │       │    │
+│  │  └──────────┘  └──────────┘  └──────────┘  └────────────┘       │    │
+│  └──────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## プロジェクト構造
+## Project Structure
 
 ```
 cc-gateway/
-├── Cargo.toml                    # ワークスペース
+├── Cargo.toml                           # Workspace root
+├── cc-gateway.toml.example              # Configuration template
+├── .env.example                         # Environment variables template
+│
 ├── crates/
-│   ├── cc-core/                  # コアライブラリ
-│   │   └── src/
-│   │       ├── llm/              # Claude API クライアント
-│   │       ├── tool/             # Tool trait & Manager
-│   │       ├── session/          # セッション管理
-│   │       └── memory/           # メモリシステム
+│   ├── cc-core/                         # Core library
+│   │   ├── src/
+│   │   │   ├── lib.rs                  # Main exports
+│   │   │   ├── config.rs               # Configuration
+│   │   │   ├── llm/                    # LLM clients
+│   │   │   │   ├── client.rs            # HTTP client
+│   │   │   │   ├── types.rs             # Request/Response types
+│   │   │   │   └── mod.rs
+│   │   │   ├── tool/                   # Tool system
+│   │   │   │   ├── definition.rs        # Tool trait
+│   │   │   │   ├── manager.rs          # Tool manager
+│   │   │   │   ├── policy.rs           # 9-layer policy
+│   │   │   │   ├── approval.rs         # Approval system
+│   │   │   │   └── mod.rs
+│   │   │   ├── session/                # Session management
+│   │   │   │   ├── manager.rs          # Session manager
+│   │   │   │   ├── store.rs            # SQLite store
+│   │   │   │   ├── types.rs            # Session types
+│   │   │   │   └── mod.rs
+│   │   │   ├── memory/                 # Memory system
+│   │   │   │   ├── store.rs            # Memory store
+│   │   │   │   ├── compaction.rs       # Memory compaction
+│   │   │   │   └── mod.rs
+│   │   │   ├── skills/                 # Skills system
+│   │   │   │   ├── loader.rs           # Skill loader
+│   │   │   │   ├── inject_prompts.rs   # Prompt injection
+│   │   │   │   └── mod.rs
+│   │   │   ├── agents/                 # Agent system
+│   │   │   │   ├── manager.rs          # Agent manager
+│   │   │   │   ├── delegation.rs       # Task delegation
+│   │   │   │   ├── types.rs            # Agent types
+│   │   │   │   └── mod.rs
+│   │   │   ├── audit/                  # Audit system
+│   │   │   │   ├── logger.rs           # Audit logger
+│   │   │   │   ├── crypto.rs           # Cryptography
+│   │   │   │   └── mod.rs
+│   │   │   └── mod.rs
+│   │   └── Cargo.toml
 │   │
-│   ├── cc-tools/                 # 組み込みツール
-│   │   └── src/
-│   │       ├── bash.rs           # コマンド実行
-│   │       ├── read_file.rs
-│   │       ├── write_file.rs
-│   │       ├── edit.rs
-│   │       ├── glob.rs
-│   │       └── grep.rs
+│   ├── cc-tools/                       # Built-in tools
+│   │   ├── src/
+│   │   │   ├── lib.rs                  # Tool registration
+│   │   │   ├── bash.rs                 # Command execution
+│   │   │   ├── read.rs                 # File read
+│   │   │   ├── write.rs                # File write
+│   │   │   ├── edit.rs                 # File edit
+│   │   │   ├── glob.rs                 # Pattern search
+│   │   │   ├── grep.rs                 # Content search
+│   │   │   ├── ls.rs                   # Directory listing
+│   │   │   ├── apply_patch.rs          # Patch application
+│   │   │   ├── web_search.rs           # Web search
+│   │   │   ├── web_fetch.rs            # Web fetch
+│   │   │   ├── nodes.rs                # Node operations
+│   │   │   └── canvas.rs               # Canvas operations
+│   │   └── Cargo.toml
 │   │
-│   ├── cc-mcp/                   # MCPクライアント
-│   ├── cc-discord/               # Discord Gateway
-│   └── cc-api/                   # HTTP API
-└── data/                         # SQLite データ
+│   ├── cc-api/                        # HTTP API server
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   ├── server.rs               # Axum server
+│   │   │   ├── routes.rs               # API routes
+│   │   │   ├── handlers.rs             # Request handlers
+│   │   │   └── middleware/
+│   │   │       ├── auth.rs             # Authentication
+│   │   │       ├── rate_limit.rs      # Rate limiting
+│   │   │       └── tailscale.rs        # Tailscale auth
+│   │   └── Cargo.toml
+│   │
+│   ├── cc-discord/                    # Discord gateway
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   ├── bot.rs                  # Bot setup
+│   │   │   ├── handler.rs              # Event handler
+│   │   │   ├── commands/
+│   │   │   │   ├── help.rs
+│   │   │   │   └── clear.rs
+│   │   │   └── session.rs             # Discord session
+│   │   └── Cargo.toml
+│   │
+│   ├── cc-telegram/                   # Telegram gateway
+│   ├── cc-whatsapp/                   # WhatsApp gateway (Twilio)
+│   ├── cc-signal/                     # Signal gateway
+│   ├── cc-slack/                      # Slack gateway
+│   ├── cc-line/                       # LINE gateway
+│   ├── cc-imessage/                   # iMessage gateway
+│   ├── cc-email/                      # Email gateway (SMTP/POP3)
+│   ├── cc-twitter/                    # Twitter/X gateway
+│   ├── cc-instagram/                  # Instagram gateway
+│   ├── cc-facebook/                   # Facebook gateway
+│   ├── cc-voice/                      # Voice gateway (TTS/Whisper)
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   ├── tts.rs                 # Text-to-Speech
+│   │   │   ├── whisper.rs             # Speech-to-Text
+│   │   │   └── phone.rs               # Phone calls (Twilio)
+│   │   └── Cargo.toml
+│   │
+│   ├── cc-browser/                    # Browser automation
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   └── browser.rs             # Headless Chrome
+│   │   └── Cargo.toml
+│   │
+│   ├── cc-ws/                        # WebSocket gateway
+│   │   ├── src/
+│   │   │   ├── lib.rs
+│   │   │   ├── server.rs              # WebSocket server
+│   │   │   ├── handler.rs             # Message handler
+│   │   │   ├── session.rs             # Session management
+│   │   │   ├── canvas.rs              # Canvas operations
+│   │   │   └── message.rs             # Message types
+│   │   └── Cargo.toml
+│   │
+│   ├── cc-dashboard/                  # Web dashboard
+│   ├── cc-mcp/                        # MCP client
+│   ├── cc-schedule/                   # Task scheduler
+│   │
+│   └── cc-gateway/                    # Main binary
+│       ├── src/
+│       │   ├── lib.rs
+│       │   ├── main.rs                # Entry point
+│       │   └── cli.rs                 # CLI options
+│       └── Cargo.toml
+│
+└── docs/                              # Documentation
+    ├── user-guide/
+    │   ├── channels/                   # Channel guides
+    │   ├── tools.md                   # Tool reference
+    │   ├── skills.md                  # Skills guide
+    │   └── ...
+    ├── developer-guide/
+    └── reference/
 ```
 
 ---
 
-## Claude API 実装（核心）
+## Data Flow
 
-### HTTP直接呼び出し
-```rust
-// Claude APIエンドポイント
-POST https://api.anthropic.com/v1/messages
+### 1. Message Reception Flow
 
-// ヘッダー
-x-api-key: {CLAUDE_API_KEY}
-anthropic-version: 2023-06-01
+```
+Channel (Discord/Telegram/etc.)
+    ↓
+Event Handler (crate-specific)
+    ↓
+Session Manager (lookup/create session)
+    ↓
+Core Agent Loop
 ```
 
-### エージェントループ
-```
-1. ユーザーメッセージ受信
-2. Claude APIにリクエスト送信
-3. stop_reason で分岐:
-   - "end_turn" → 応答を返す
-   - "tool_use" → ツール実行 → 結果を送信 → 2に戻る
-```
+### 2. Agent Loop
 
-### Tool Useフロー
-```json
-// Claude応答 (tool_use)
-{
-  "content": [{"type": "tool_use", "name": "read_file", "input": {...}}],
-  "stop_reason": "tool_use"
-}
-
-// ツール実行後の送信
-{
-  "messages": [
-    {"role": "user", "content": "Read file"},
-    {"role": "assistant", "content": [tool_use]},
-    {"role": "user", "content": [{"type": "tool_result", "content": "..."}]}
-  ]
-}
+```
+User Message
+    ↓
+Build Request (with session context)
+    ↓
+LLM API (Claude/OpenAI/GLM)
+    ↓
+┌──────────────────────────────────────────┐
+│  Check stop_reason:                      │
+│  - "end_turn" → Return response         │
+│  - "tool_use" → Execute tool → Loop     │
+└──────────────────────────────────────────┘
+    ↓
+Tool Execution (with policy check)
+    ↓
+Tool Result → LLM API (continue loop)
 ```
 
----
+### 3. Security Flow
 
-## 実装フェーズ
-
-### Phase 1: コアライブラリ (Week 1-2)
-- [ ] Claude API HTTPクライアント実装
-- [ ] エージェントループ実装
-- [ ] Tool trait & ToolManager
-- [ ] セッション管理（SQLite永続化）
-- [ ] メモリシステム
-
-### Phase 2: ツールシステム (Week 2-3)
-- [ ] Bashツール
-- [ ] Read/Write/Editファイル
-- [ ] Glob/Grep
-- [ ] WebFetch
-- [ ] Remember/Recall
-
-### Phase 3: MCP統合 (Week 3)
-- [ ] rmcpクライアント統合
-- [ ] Tool traitアダプター
-
-### Phase 4: Discord Gateway (Week 3-4)
-- [ ] Serenityイベントハンドラー
-- [ ] Slash Commands (/ask, /memory, /schedule)
-- [ ] メッセージ監視モード
-
-### Phase 5: HTTP API (Week 4)
-- [ ] axum REST API
-- [ ] 認証ミドルウェア
-- [ ] レートリミット
-
----
-
-## 主要Crate
-
-```toml
-[workspace.dependencies]
-tokio = "1"
-reqwest = { version = "0.12", features = ["json", "stream"] }
-axum = "0.8"
-serenity = "0.12"
-rusqlite = "0.32"
-rmcp = "0.16"
-cron = "0.15"
-serde = "1"
-serde_json = "1"
+```
+Tool Request
+    ↓
+Policy Check (9-layer)
+    ↓
+┌─────────────────────────────────────┐
+│  Level 1-3: Auto-approve           │
+│  Level 4-5: DM confirmation        │
+│  Level 6-9: Explicit approval      │
+└─────────────────────────────────────┘
+    ↓
+Execution (if approved)
+    ↓
+Audit Log
 ```
 
 ---
 
-## 既存コードからの再利用
+## Key Components
 
-| cc-discord-bot | cc-gateway |
-|----------------|------------|
-| `src/tool.rs` | Tool trait設計 |
-| `src/session.rs` | セッション管理パターン |
-| `src/api.rs` | axum API構造 |
-| `src/mcp_client.rs` | MCPクライアント |
-| `src/tools/*.rs` | ツール実装 |
+### Tool System (9-Layer Policy)
+
+| Level | Tools | Approval Required |
+|:-----:|-------|:-----------------:|
+| 1 | Read, Glob, Grep, ls | No |
+| 2 | WebFetch, WebSearch | No |
+| 3 | Edit, apply_patch | No |
+| 4 | Write | DM |
+| 5 | Bash (read-only) | DM |
+| 6 | Browser | Yes |
+| 7 | Bash (full) | Yes |
+| 8 | External API | Yes |
+| 9 | Security config | Yes |
+
+### Session Management
+
+- SQLite-backed persistent sessions
+- Per-channel session isolation
+- Conversation history management
+- Cost tracking per session
+
+### Memory System
+
+- Vector-based semantic search (planned)
+- SQLite-backed storage
+- Memory compaction
+- Per-session memory isolation
 
 ---
 
-## 環境変数
+## Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| Language | Rust 2024 Edition |
+| Async Runtime | tokio |
+| HTTP Client | reqwest (rustls-tls) |
+| HTTP Server | axum |
+| WebSocket | tokio-tungstenite |
+| Database | rusqlite (bundled) |
+| Discord | poise |
+| Telegram | teloxide |
+| MCP | rmcp |
+| Browser | headless-chrome |
+
+---
+
+## Configuration Priority
+
+1. Environment variables (.env)
+2. TOML configuration file
+3. Default values
+
+---
+
+## Environment Variables
 
 ```bash
+# Required
 CLAUDE_API_KEY=sk-ant-...
-CLAUDE_MODEL=claude-sonnet-4-20250514
+LLM_PROVIDER=claude  # or openai
+LLM_MODEL=claude-sonnet-4-20250514
+
+# Optional - Channels
 DISCORD_BOT_TOKEN=...
-ADMIN_USER_IDS=...
-API_KEY=...  # HTTP API認証
+TELEGRAM_BOT_TOKEN=...
+TWILIO_ACCOUNT_SID=...
+SLACK_BOT_TOKEN=...
+LINE_CHANNEL_ACCESS_TOKEN=...
+# ... etc
+
+# Optional - Platform
 API_PORT=3000
+API_KEY=...
+
+# Optional - Security
+TAILSCALE_AUTH_ENABLED=true
+APPROVAL_REQUIRED=true
 ```
-
----
-
-## 検証方法
-
-1. **Phase 1完了**: 単体テストでClaude API呼び出し確認
-2. **Phase 4完了**: Discordから`/ask`で応答確認
-3. **統合テスト**: ファイル操作、ツール実行確認
-4. **最終**: cc-discord-botと同等機能の動作確認
-
----
-
-## 次のアクション
-
-1. `~/GitHub/cc-gateway/` ディレクトリ作成
-2. Cargo.toml ワークスペース初期化
-3. cc-core crate 作成
-4. Claude APIクライアント実装開始
