@@ -34,6 +34,15 @@ pub enum BrowserError {
 
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+
+    #[error("Cookie error: {0}")]
+    Cookie(String),
+
+    #[error("Download error: {0}")]
+    Download(String),
+
+    #[error("Frame error: {0}")]
+    Frame(String),
 }
 
 /// Result type alias

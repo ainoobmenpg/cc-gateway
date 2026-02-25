@@ -3,7 +3,7 @@
 //! Provides Tool implementations for browser automation using headless Chrome.
 
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{debug, info};
@@ -211,9 +211,9 @@ impl Tool for BrowserClickTool {
     }
 
     async fn execute(&self, input: Value) -> cc_core::Result<ToolResult> {
-        let selector = input["selector"]
-            .as_str()
-            .ok_or_else(|| cc_core::Error::ToolExecution("Missing selector parameter".to_string()))?;
+        let selector = input["selector"].as_str().ok_or_else(|| {
+            cc_core::Error::ToolExecution("Missing selector parameter".to_string())
+        })?;
 
         debug!("browser_click: {}", selector);
 
@@ -284,9 +284,9 @@ impl Tool for BrowserTypeTool {
     }
 
     async fn execute(&self, input: Value) -> cc_core::Result<ToolResult> {
-        let selector = input["selector"]
-            .as_str()
-            .ok_or_else(|| cc_core::Error::ToolExecution("Missing selector parameter".to_string()))?;
+        let selector = input["selector"].as_str().ok_or_else(|| {
+            cc_core::Error::ToolExecution("Missing selector parameter".to_string())
+        })?;
         let text = input["text"]
             .as_str()
             .ok_or_else(|| cc_core::Error::ToolExecution("Missing text parameter".to_string()))?;
@@ -365,8 +365,10 @@ impl Tool for BrowserScreenshotTool {
             .manager
             .execute_with_session(|session| {
                 let screenshot_data = session.screenshot(full_page)?;
-                let base64_data =
-                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &screenshot_data);
+                let base64_data = base64::Engine::encode(
+                    &base64::engine::general_purpose::STANDARD,
+                    &screenshot_data,
+                );
 
                 Ok(json!({
                     "image": base64_data,
@@ -570,9 +572,9 @@ impl Tool for BrowserWaitTool {
     }
 
     async fn execute(&self, input: Value) -> cc_core::Result<ToolResult> {
-        let selector = input["selector"]
-            .as_str()
-            .ok_or_else(|| cc_core::Error::ToolExecution("Missing selector parameter".to_string()))?;
+        let selector = input["selector"].as_str().ok_or_else(|| {
+            cc_core::Error::ToolExecution("Missing selector parameter".to_string())
+        })?;
         let timeout = input["timeout"].as_u64();
 
         debug!("browser_wait: {} (timeout: {:?})", selector, timeout);
@@ -596,6 +598,474 @@ impl Tool for BrowserWaitTool {
     }
 }
 
+/// Browser get frames tool
+pub struct BrowserFramesTool {
+    manager: BrowserManager,
+}
+
+impl BrowserFramesTool {
+    pub fn new(manager: BrowserManager) -> Self {
+        Self { manager }
+    }
+
+    pub fn with_defaults() -> Self {
+        Self::new(BrowserManager::new())
+    }
+}
+
+#[async_trait]
+impl Tool for BrowserFramesTool {
+    fn name(&self) -> &str {
+        "browser_frames"
+    }
+
+    fn description(&self) -> &str {
+        "Get information about all frames (iframes) on the current page"
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {}
+        })
+    }
+
+    async fn execute(&self, _input: Value) -> cc_core::Result<ToolResult> {
+        let result = self
+            .manager
+            .execute_with_session(|session| {
+                let frames = session.get_frames()?;
+                Ok(json!({
+                    "frames": frames,
+                    "count": frames.len(),
+                    "status": "success"
+                }))
+            })
+            .await
+            .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?;
+
+        Ok(ToolResult::success(
+            serde_json::to_string(&result).unwrap_or_default(),
+        ))
+    }
+}
+
+/// Browser switch frame tool
+pub struct BrowserSwitchFrameTool {
+    manager: BrowserManager,
+}
+
+impl BrowserSwitchFrameTool {
+    pub fn new(manager: BrowserManager) -> Self {
+        Self { manager }
+    }
+
+    pub fn with_defaults() -> Self {
+        Self::new(BrowserManager::new())
+    }
+}
+
+#[async_trait]
+impl Tool for BrowserSwitchFrameTool {
+    fn name(&self) -> &str {
+        "browser_switch_frame"
+    }
+
+    fn description(&self) -> &str {
+        "Switch to a frame by index or name"
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "frame": {
+                    "type": "string",
+                    "description": "Frame index (number) or frame name/id"
+                }
+            },
+            "required": ["frame"]
+        })
+    }
+
+    async fn execute(&self, input: Value) -> cc_core::Result<ToolResult> {
+        let frame = input["frame"].as_str().ok_or_else(|| {
+            cc_core::Error::ToolExecution("Missing frame parameter".to_string())
+        })?;
+
+        debug!("browser_switch_frame: {}", frame);
+
+        let result = self
+            .manager
+            .execute_with_session(|session| {
+                session.switch_to_frame(frame)?;
+                Ok(json!({
+                    "frame": frame,
+                    "action": "switched",
+                    "status": "success"
+                }))
+            })
+            .await
+            .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?;
+
+        Ok(ToolResult::success(
+            serde_json::to_string(&result).unwrap_or_default(),
+        ))
+    }
+}
+
+/// Browser get cookies tool
+pub struct BrowserCookiesTool {
+    manager: BrowserManager,
+}
+
+impl BrowserCookiesTool {
+    pub fn new(manager: BrowserManager) -> Self {
+        Self { manager }
+    }
+
+    pub fn with_defaults() -> Self {
+        Self::new(BrowserManager::new())
+    }
+}
+
+#[async_trait]
+impl Tool for BrowserCookiesTool {
+    fn name(&self) -> &str {
+        "browser_cookies"
+    }
+
+    fn description(&self) -> &str {
+        "Get, set, or delete cookies for the current page"
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "Action: 'get', 'set', 'delete', or 'clear'"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Cookie name (for set/delete)"
+                },
+                "value": {
+                    "type": "string",
+                    "description": "Cookie value (for set)"
+                },
+                "domain": {
+                    "type": "string",
+                    "description": "Cookie domain (for set, optional)"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Cookie path (for set, optional)"
+                }
+            },
+            "required": ["action"]
+        })
+    }
+
+    async fn execute(&self, input: Value) -> cc_core::Result<ToolResult> {
+        let action = input["action"].as_str().ok_or_else(|| {
+            cc_core::Error::ToolExecution("Missing action parameter".to_string())
+        })?;
+
+        let result = match action {
+            "get" => self
+                .manager
+                .execute_with_session(|session| {
+                    let cookies = session.get_cookies()?;
+                    Ok(json!({
+                        "cookies": cookies,
+                        "count": cookies.len(),
+                        "status": "success"
+                    }))
+                })
+                .await
+                .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?,
+
+            "set" => {
+                let name = input["name"].as_str().ok_or_else(|| {
+                    cc_core::Error::ToolExecution("Missing name parameter".to_string())
+                })?;
+                let value = input["value"]
+                    .as_str()
+                    .ok_or_else(|| cc_core::Error::ToolExecution("Missing value parameter".to_string()))?;
+                let domain = input["domain"].as_str();
+                let path = input["path"].as_str();
+
+                self.manager
+                    .execute_with_session(|session| {
+                        session.set_cookie(name, value, domain, path)?;
+                        Ok(json!({
+                            "action": "set",
+                            "name": name,
+                            "status": "success"
+                        }))
+                    })
+                    .await
+                    .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?
+            }
+
+            "delete" => {
+                let name = input["name"].as_str().ok_or_else(|| {
+                    cc_core::Error::ToolExecution("Missing name parameter".to_string())
+                })?;
+
+                self.manager
+                    .execute_with_session(|session| {
+                        session.delete_cookie(name)?;
+                        Ok(json!({
+                            "action": "delete",
+                            "name": name,
+                            "status": "success"
+                        }))
+                    })
+                    .await
+                    .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?
+            }
+
+            "clear" => self
+                .manager
+                .execute_with_session(|session| {
+                    session.clear_cookies()?;
+                    Ok(json!({
+                        "action": "clear",
+                        "status": "success"
+                    }))
+                })
+                .await
+                .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?,
+
+            _ => {
+                return Ok(ToolResult::error("Invalid action. Use: get, set, delete, or clear"))
+            }
+        };
+
+        Ok(ToolResult::success(
+            serde_json::to_string(&result).unwrap_or_default(),
+        ))
+    }
+}
+
+/// Browser download tool
+pub struct BrowserDownloadTool {
+    manager: BrowserManager,
+}
+
+impl BrowserDownloadTool {
+    pub fn new(manager: BrowserManager) -> Self {
+        Self { manager }
+    }
+
+    pub fn with_defaults() -> Self {
+        Self::new(BrowserManager::new())
+    }
+}
+
+#[async_trait]
+impl Tool for BrowserDownloadTool {
+    fn name(&self) -> &str {
+        "browser_download"
+    }
+
+    fn description(&self) -> &str {
+        "Manage downloads or trigger download from a link"
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "Action: 'set_path', 'download', or 'wait'"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Download directory path"
+                },
+                "selector": {
+                    "type": "string",
+                    "description": "CSS selector for download link (for download action)"
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Timeout in seconds (for wait action)"
+                }
+            },
+            "required": ["action"]
+        })
+    }
+
+    async fn execute(&self, input: Value) -> cc_core::Result<ToolResult> {
+        let action = input["action"].as_str().ok_or_else(|| {
+            cc_core::Error::ToolExecution("Missing action parameter".to_string())
+        })?;
+
+        let result = match action {
+            "set_path" => {
+                let path = input["path"].as_str().ok_or_else(|| {
+                    cc_core::Error::ToolExecution("Missing path parameter".to_string())
+                })?;
+
+                self.manager
+                    .execute_with_session(|session| {
+                        session.set_download_path(path)?;
+                        Ok(json!({
+                            "action": "set_path",
+                            "path": path,
+                            "status": "success"
+                        }))
+                    })
+                    .await
+                    .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?
+            }
+
+            "download" => {
+                let selector = input["selector"].as_str().ok_or_else(|| {
+                    cc_core::Error::ToolExecution("Missing selector parameter".to_string())
+                })?;
+                let path = input["path"].as_str().unwrap_or("/tmp");
+
+                self.manager
+                    .execute_with_session(|session| {
+                        let filename = session.download_by_selector(selector, path)?;
+                        Ok(json!({
+                            "action": "download",
+                            "filename": filename,
+                            "status": "success"
+                        }))
+                    })
+                    .await
+                    .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?
+            }
+
+            "wait" => {
+                let timeout = input["timeout"].as_u64().unwrap_or(30);
+
+                self.manager
+                    .execute_with_session(|session| {
+                        let files = session.wait_for_download(timeout)?;
+                        Ok(json!({
+                            "action": "wait",
+                            "files": files,
+                            "status": "success"
+                        }))
+                    })
+                    .await
+                    .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?
+            }
+
+            _ => {
+                return Ok(ToolResult::error(
+                    "Invalid action. Use: set_path, download, or wait",
+                ))
+            }
+        };
+
+        Ok(ToolResult::success(
+            serde_json::to_string(&result).unwrap_or_default(),
+        ))
+    }
+}
+
+/// Browser navigation tools (back, forward, refresh, url)
+pub struct BrowserNavigationTool {
+    manager: BrowserManager,
+}
+
+impl BrowserNavigationTool {
+    pub fn new(manager: BrowserManager) -> Self {
+        Self { manager }
+    }
+
+    pub fn with_defaults() -> Self {
+        Self::new(BrowserManager::new())
+    }
+}
+
+#[async_trait]
+impl Tool for BrowserNavigationTool {
+    fn name(&self) -> &str {
+        "browser_navigation"
+    }
+
+    fn description(&self) -> &str {
+        "Navigate back, forward, refresh, or get current URL"
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "Action: 'back', 'forward', 'refresh', or 'url'"
+                }
+            },
+            "required": ["action"]
+        })
+    }
+
+    async fn execute(&self, input: Value) -> cc_core::Result<ToolResult> {
+        let action = input["action"].as_str().ok_or_else(|| {
+            cc_core::Error::ToolExecution("Missing action parameter".to_string())
+        })?;
+
+        let result = match action {
+            "back" => self
+                .manager
+                .execute_with_session(|session| {
+                    session.back()?;
+                    Ok(json!({ "action": "back", "status": "success" }))
+                })
+                .await
+                .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?,
+
+            "forward" => self
+                .manager
+                .execute_with_session(|session| {
+                    session.forward()?;
+                    Ok(json!({ "action": "forward", "status": "success" }))
+                })
+                .await
+                .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?,
+
+            "refresh" => self
+                .manager
+                .execute_with_session(|session| {
+                    session.refresh()?;
+                    Ok(json!({ "action": "refresh", "status": "success" }))
+                })
+                .await
+                .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?,
+
+            "url" => self
+                .manager
+                .execute_with_session(|session| {
+                    let url = session.get_current_url()?;
+                    Ok(json!({ "action": "url", "url": url, "status": "success" }))
+                })
+                .await
+                .map_err(|e| cc_core::Error::ToolExecution(e.to_string()))?,
+
+            _ => {
+                return Ok(ToolResult::error(
+                    "Invalid action. Use: back, forward, refresh, or url",
+                ))
+            }
+        };
+
+        Ok(ToolResult::success(
+            serde_json::to_string(&result).unwrap_or_default(),
+        ))
+    }
+}
+
 /// Register browser tools with a tool manager using a shared browser session
 pub fn register_browser_tools(manager: &mut cc_core::ToolManager) {
     let browser_manager = BrowserManager::new();
@@ -603,12 +1073,21 @@ pub fn register_browser_tools(manager: &mut cc_core::ToolManager) {
     manager.register(Arc::new(BrowserNavigateTool::new(browser_manager.clone())));
     manager.register(Arc::new(BrowserClickTool::new(browser_manager.clone())));
     manager.register(Arc::new(BrowserTypeTool::new(browser_manager.clone())));
-    manager.register(Arc::new(BrowserScreenshotTool::new(browser_manager.clone())));
+    manager.register(Arc::new(BrowserScreenshotTool::new(
+        browser_manager.clone(),
+    )));
     manager.register(Arc::new(BrowserExtractTool::new(browser_manager.clone())));
     manager.register(Arc::new(BrowserEvaluateTool::new(browser_manager.clone())));
-    manager.register(Arc::new(BrowserWaitTool::new(browser_manager)));
+    manager.register(Arc::new(BrowserWaitTool::new(browser_manager.clone())));
+    manager.register(Arc::new(BrowserFramesTool::new(browser_manager.clone())));
+    manager.register(Arc::new(BrowserSwitchFrameTool::new(
+        browser_manager.clone(),
+    )));
+    manager.register(Arc::new(BrowserCookiesTool::new(browser_manager.clone())));
+    manager.register(Arc::new(BrowserDownloadTool::new(browser_manager.clone())));
+    manager.register(Arc::new(BrowserNavigationTool::new(browser_manager)));
 
-    info!("Registered 7 browser automation tools");
+    info!("Registered 12 browser automation tools");
 }
 
 #[cfg(test)]
@@ -619,12 +1098,27 @@ mod tests {
     fn test_tool_names() {
         let manager = BrowserManager::new();
 
-        assert_eq!(BrowserNavigateTool::new(manager.clone()).name(), "browser_navigate");
-        assert_eq!(BrowserClickTool::new(manager.clone()).name(), "browser_click");
+        assert_eq!(
+            BrowserNavigateTool::new(manager.clone()).name(),
+            "browser_navigate"
+        );
+        assert_eq!(
+            BrowserClickTool::new(manager.clone()).name(),
+            "browser_click"
+        );
         assert_eq!(BrowserTypeTool::new(manager.clone()).name(), "browser_type");
-        assert_eq!(BrowserScreenshotTool::new(manager.clone()).name(), "browser_screenshot");
-        assert_eq!(BrowserExtractTool::new(manager.clone()).name(), "browser_extract");
-        assert_eq!(BrowserEvaluateTool::new(manager.clone()).name(), "browser_evaluate");
+        assert_eq!(
+            BrowserScreenshotTool::new(manager.clone()).name(),
+            "browser_screenshot"
+        );
+        assert_eq!(
+            BrowserExtractTool::new(manager.clone()).name(),
+            "browser_extract"
+        );
+        assert_eq!(
+            BrowserEvaluateTool::new(manager.clone()).name(),
+            "browser_evaluate"
+        );
         assert_eq!(BrowserWaitTool::new(manager).name(), "browser_wait");
     }
 

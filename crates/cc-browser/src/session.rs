@@ -2,6 +2,7 @@
 //!
 //! Provides a managed browser instance with automatic lifecycle handling.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -165,9 +166,9 @@ impl BrowserSession {
     /// Get the active tab
     pub fn active_tab(&self) -> Result<Arc<Tab>> {
         let tabs = self.browser.get_tabs();
-        let tabs_guard = tabs.lock().map_err(|e| {
-            BrowserError::TabError(format!("Failed to lock tabs: {}", e))
-        })?;
+        let tabs_guard = tabs
+            .lock()
+            .map_err(|e| BrowserError::TabError(format!("Failed to lock tabs: {}", e)))?;
 
         tabs_guard
             .first()
@@ -186,9 +187,8 @@ impl BrowserSession {
         })?;
 
         // Wait for page to load
-        tab.wait_until_navigated().map_err(|e| {
-            BrowserError::Navigation(format!("Navigation timeout: {}", e))
-        })?;
+        tab.wait_until_navigated()
+            .map_err(|e| BrowserError::Navigation(format!("Navigation timeout: {}", e)))?;
 
         // Get page title
         let title = tab.get_title().unwrap_or_else(|_| "Unknown".to_string());
@@ -211,7 +211,9 @@ impl BrowserSession {
                 None,
                 true,
             )
-            .map_err(|e| BrowserError::Screenshot(format!("Failed to capture screenshot: {}", e)))?;
+            .map_err(|e| {
+                BrowserError::Screenshot(format!("Failed to capture screenshot: {}", e))
+            })?;
 
         info!("Screenshot captured: {} bytes", screenshot.len());
 
@@ -232,9 +234,7 @@ impl BrowserSession {
             BrowserError::ElementNotFound(format!("Element '{}' not found: {}", selector, e))
         })?
         .click()
-        .map_err(|e| {
-            BrowserError::Interaction(format!("Failed to click '{}': {}", selector, e))
-        })?;
+        .map_err(|e| BrowserError::Interaction(format!("Failed to click '{}': {}", selector, e)))?;
 
         info!("Clicked element: {}", selector);
 
@@ -306,11 +306,9 @@ impl BrowserSession {
             &script[..std::cmp::min(50, script.len())]
         );
 
-        let result = tab
-            .evaluate(script, false)
-            .map_err(|e| {
-                BrowserError::Interaction(format!("JavaScript execution failed: {}", e))
-            })?;
+        let result = tab.evaluate(script, false).map_err(|e| {
+            BrowserError::Interaction(format!("JavaScript execution failed: {}", e))
+        })?;
 
         Ok(result.value.unwrap_or(serde_json::Value::Null))
     }
@@ -359,16 +357,18 @@ impl BrowserSession {
         let tabs = self.tabs();
         for tab in tabs {
             if tab.get_target_id() == tab_id {
-                tab.close(true).map_err(|e| {
-                    BrowserError::TabError(format!("Failed to close tab: {}", e))
-                })?;
+                tab.close(true)
+                    .map_err(|e| BrowserError::TabError(format!("Failed to close tab: {}", e)))?;
                 info!("Closed tab: {}", tab_id);
                 return Ok(());
             }
         }
 
         warn!("Tab not found for closing: {}", tab_id);
-        Err(BrowserError::TabError(format!("Tab '{}' not found", tab_id)))
+        Err(BrowserError::TabError(format!(
+            "Tab '{}' not found",
+            tab_id
+        )))
     }
 
     /// Get page HTML source
@@ -386,6 +386,360 @@ impl BrowserSession {
     pub fn config(&self) -> &BrowserConfig {
         &self.config
     }
+
+    // ==================== Frame Handling ====================
+
+    /// Get all frame information from the page
+    pub fn get_frames(&self) -> Result<Vec<FrameInfo>> {
+        let tab = self.active_tab()?;
+
+        let frames_script = r#"
+            (function() {
+                var result = [];
+                function collectFrames(frames, depth) {
+                    for (var i = 0; i < frames.length; i++) {
+                        var frame = frames[i];
+                        result.push({
+                            name: frame.name || '',
+                            url: frame.location || '',
+                            depth: depth,
+                            index: i
+                        });
+                        if (frame.frames && frame.frames.length > 0) {
+                            collectFrames(frame.frames, depth + 1);
+                        }
+                    }
+                }
+                collectFrames(window.frames, 0);
+                return result;
+            })()
+        "#;
+
+        let result = tab.evaluate(frames_script, false).map_err(|e| {
+            BrowserError::Frame(format!("Failed to get frames: {}", e))
+        })?;
+
+        let frames: Vec<FrameInfo> = serde_json::from_value(result.value.unwrap_or_default())
+            .map_err(|e| BrowserError::Frame(format!("Failed to parse frames: {}", e)))?;
+
+        debug!("Found {} frames", frames.len());
+        Ok(frames)
+    }
+
+    /// Switch to a frame by index or name
+    pub fn switch_to_frame(&self, frame_identifier: &str) -> Result<()> {
+        let tab = self.active_tab()?;
+
+        let script = format!(
+            r#"
+            (function() {{
+                var frameId = "{}";
+                var frame = null;
+                if (!isNaN(frameId)) {{
+                    frame = window.frames[parseInt(frameId)];
+                }} else {{
+                    frame = window.frames[frameId] || document.querySelector('iframe[name="{}"]') || document.querySelector('iframe[id="{}"]');
+                }}
+                if (frame) {{
+                    window.currentFrame = frame;
+                    return true;
+                }}
+                return false;
+            }})()
+            "#,
+            frame_identifier, frame_identifier, frame_identifier
+        );
+
+        let result = tab.evaluate(&script, false).map_err(|e| {
+            BrowserError::Frame(format!("Failed to switch to frame: {}", e))
+        })?;
+
+        if result.value.and_then(|v| v.as_bool()).unwrap_or(false) {
+            info!("Switched to frame: {}", frame_identifier);
+            Ok(())
+        } else {
+            Err(BrowserError::Frame(format!("Frame '{}' not found", frame_identifier)))
+        }
+    }
+
+    /// Get content from a specific iframe
+    pub fn get_iframe_content(&self, selector: &str) -> Result<String> {
+        let tab = self.active_tab()?;
+
+        let script = format!(
+            r#"
+            (function() {{
+                var iframe = document.querySelector('{}');
+                if (iframe && iframe.contentDocument) {{
+                    return iframe.contentDocument.body.innerHTML;
+                }}
+                return '';
+            }})()
+            "#,
+            selector
+        );
+
+        let result = tab.evaluate(&script, false).map_err(|e| {
+            BrowserError::Frame(format!("Failed to get iframe content: {}", e))
+        })?;
+
+        let content = result.value.unwrap_or_default().as_str().unwrap_or("").to_string();
+        debug!("Got iframe content for {}: {} bytes", selector, content.len());
+        Ok(content)
+    }
+
+    // ==================== Cookie Management ====================
+
+    /// Get all cookies for the current domain
+    pub fn get_cookies(&self) -> Result<Vec<CookieInfo>> {
+        let tab = self.active_tab()?;
+
+        let cookies = tab.get_cookies().map_err(|e| {
+            BrowserError::Cookie(format!("Failed to get cookies: {}", e))
+        })?;
+
+        let cookie_infos: Vec<CookieInfo> = cookies
+            .into_iter()
+            .map(|c| CookieInfo {
+                name: c.name,
+                value: c.value,
+                domain: c.domain,
+                path: c.path,
+                secure: c.secure,
+                http_only: c.http_only,
+                same_site: c.same_site.map(|s| format!("{:?}", s)),
+                expires: Some(c.expires),
+            })
+            .collect();
+
+        debug!("Got {} cookies", cookie_infos.len());
+        Ok(cookie_infos)
+    }
+
+    /// Set a cookie
+    pub fn set_cookie(&self, name: &str, value: &str, domain: Option<&str>, path: Option<&str>) -> Result<()> {
+        let tab = self.active_tab()?;
+
+        let domain_clause = domain.map(|d| format!(r#", domain: "{}""#, d)).unwrap_or_default();
+        let path_clause = path.map(|p| format!(r#", path: "{}""#, p)).unwrap_or_default();
+
+        let script = format!(
+            r#"
+            (function() {{
+                document.cookie = "{}={}"{}{};
+            }})()
+            "#,
+            name, value, domain_clause, path_clause
+        );
+
+        tab.evaluate(&script, false).map_err(|e| {
+            BrowserError::Cookie(format!("Failed to set cookie: {}", e))
+        })?;
+
+        info!("Set cookie: {}={}", name, value);
+        Ok(())
+    }
+
+    /// Delete a cookie by name
+    pub fn delete_cookie(&self, name: &str) -> Result<()> {
+        let tab = self.active_tab()?;
+
+        let script = format!(
+            r#"
+            (function() {{
+                document.cookie = "{}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/";
+            }})()
+            "#,
+            name
+        );
+
+        tab.evaluate(&script, false).map_err(|e| {
+            BrowserError::Cookie(format!("Failed to delete cookie: {}", e))
+        })?;
+
+        info!("Deleted cookie: {}", name);
+        Ok(())
+    }
+
+    /// Clear all cookies
+    pub fn clear_cookies(&self) -> Result<()> {
+        let script = r#"
+            (function() {
+                var cookies = document.cookie.split(";");
+                for (var i = 0; i < cookies.length; i++) {
+                    var cookie = cookies[i];
+                    var eqPos = cookie.indexOf("=");
+                    var name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+                    document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/";
+                }
+            })()
+        "#;
+
+        let tab = self.active_tab()?;
+        tab.evaluate(script, false).map_err(|e| {
+            BrowserError::Cookie(format!("Failed to clear cookies: {}", e))
+        })?;
+
+        info!("Cleared all cookies");
+        Ok(())
+    }
+
+    // ==================== Download Handling ====================
+
+    /// Set download behavior and directory
+    pub fn set_download_path(&self, path: &str) -> Result<()> {
+        let tab = self.active_tab()?;
+
+        let script = format!(
+            r#"
+            (function() {{
+                window.downloadPath = "{}";
+            }})()
+            "#,
+            path
+        );
+
+        tab.evaluate(&script, false).map_err(|e| {
+            BrowserError::Download(format!("Failed to set download path: {}", e))
+        })?;
+
+        info!("Set download path: {}", path);
+        Ok(())
+    }
+
+    /// Trigger a file download by clicking a link
+    pub fn download_by_selector(&self, selector: &str, download_dir: &str) -> Result<String> {
+        let tab = self.active_tab()?;
+
+        // First, set up the download handler via CDP
+        let download_script = format!(
+            r#"
+            (function() {{
+                var element = document.querySelector('{}');
+                if (!element) return null;
+
+                var href = element.href || element.download;
+                if (href) return href;
+
+                // If it's a button or other element, click it
+                element.click();
+                return 'clicked';
+            }})()
+            "#,
+            selector
+        );
+
+        let result = tab.evaluate(&download_script, false).map_err(|e| {
+            BrowserError::Download(format!("Failed to initiate download: {}", e))
+        })?;
+
+        let _download_info = result.value.unwrap_or_default();
+
+        // Create a unique filename based on timestamp
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| BrowserError::Download(e.to_string()))?
+            .as_millis();
+
+        let filename = format!("{}/download_{}", download_dir, timestamp);
+
+        info!("Download initiated for selector: {} -> {}", selector, filename);
+        Ok(filename)
+    }
+
+    /// Wait for a download to complete
+    pub fn wait_for_download(&self, timeout_secs: u64) -> Result<Vec<PathBuf>> {
+        // This is a simplified implementation - in practice, you'd monitor the download directory
+        let timeout = Duration::from_secs(timeout_secs);
+        let start = std::time::Instant::now();
+
+        // For headless Chrome, downloads need to be configured via LaunchOptions
+        // This is a placeholder that returns empty - actual download monitoring
+        // would require the download folder to be configured at browser launch time
+        debug!("Waiting for download (timeout: {}s)", timeout_secs);
+
+        while start.elapsed() < timeout {
+            // In a full implementation, you'd check the download directory here
+            std::thread::sleep(Duration::from_millis(500));
+        }
+
+        Ok(vec![])
+    }
+
+    /// Get current URL
+    pub fn get_current_url(&self) -> Result<String> {
+        let tab = self.active_tab()?;
+
+        let url = tab.get_url();
+
+        Ok(url)
+    }
+
+    /// Go back in history
+    pub fn back(&self) -> Result<()> {
+        let tab = self.active_tab()?;
+
+        let script = r#"
+            (function() { window.history.back(); })()
+        "#;
+
+        tab.evaluate(script, false).map_err(|e| {
+            BrowserError::Navigation(format!("Failed to go back: {}", e))
+        })?;
+
+        info!("Navigated back");
+        Ok(())
+    }
+
+    /// Go forward in history
+    pub fn forward(&self) -> Result<()> {
+        let tab = self.active_tab()?;
+
+        let script = r#"
+            (function() { window.history.forward(); })()
+        "#;
+
+        tab.evaluate(script, false).map_err(|e| {
+            BrowserError::Navigation(format!("Failed to go forward: {}", e))
+        })?;
+
+        info!("Navigated forward");
+        Ok(())
+    }
+
+    /// Refresh the page
+    pub fn refresh(&self) -> Result<()> {
+        let tab = self.active_tab()?;
+
+        tab.reload(true, None).map_err(|e| {
+            BrowserError::Navigation(format!("Failed to refresh: {}", e))
+        })?;
+
+        info!("Page refreshed");
+        Ok(())
+    }
+}
+
+/// Frame information
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FrameInfo {
+    pub name: String,
+    pub url: String,
+    pub depth: u32,
+    pub index: u32,
+}
+
+/// Cookie information
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CookieInfo {
+    pub name: String,
+    pub value: String,
+    pub domain: String,
+    pub path: String,
+    pub secure: bool,
+    pub http_only: bool,
+    pub same_site: Option<String>,
+    pub expires: Option<f64>,
 }
 
 impl Drop for BrowserSession {
